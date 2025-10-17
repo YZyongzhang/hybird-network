@@ -1,0 +1,8 @@
+{
+    "python.defaultInterpreterPath": "/home/getuanhui/anaconda3/envs/ss/bin/python",
+    "python.analysis.extraPaths": [
+        "/home/getuanhui/project/sound-spaces",
+        "/home/getuanhui/project/habitat-lab",
+        "/home/getuanhui/project/habitat-sim/src_python"
+    ]
+}

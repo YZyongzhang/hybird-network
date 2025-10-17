@@ -1,0 +1,1 @@
+from network.foundation_model import Network
