@@ -1,107 +1,159 @@
-import sys
- 
-from module import *
-from network.foundation_model import Network
-from train.VADE import VADE
+from torch.utils.data import DataLoader
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch
+from tqdm import tqdm
+from utils.log import logger
+import numpy as np
+import math
+import pickle
+NUM_SECTORS = 8
+SECTOR_ANGLE = 2 * 180 / NUM_SECTORS  # 每个扇区角度
+class DirectionLoss(nn.Module):
+    def __init__(self, num_sectors=NUM_SECTORS):
+        super().__init__()
+        self.num_sectors = num_sectors
+        self.ce_loss = nn.CrossEntropyLoss()
+
+    def forward(self, sector_logits, true_angle):
+        """
+        sector_logits: [B, num_sectors] 分类 logits
+        delta_pred: [B] 微调预测, 单位 rad
+        true_angle: [B] 真值角度, 单位 rad
+        """
+        # -------------------
+        # 1. 分类标签
+        # -------------------
+        # 将真实角度映射到扇区索引
+        
+        sector_label = torch.remainder(true_angle + 180, 2*180) // SECTOR_ANGLE
+        sector_label = sector_label.long()
+
+        # -------------------
+        # 2. 分类 loss
+        # -------------------
+        loss_ce = self.ce_loss(sector_logits, sector_label)
+
+        return loss_ce , sector_label
 class Train:
-    def __init__(self, model, Adam, train_loader ,val_loader, epoch, writer, device , save_dir):
+    def __init__(self, model, Adam, train_loader,val_loader, epoch, writer, save_dir ,train_size , val_size, device='cuda'):
         self.train_model = model.to(device)
         self.optimizer = Adam
         self.epoch = epoch
         self.writer = writer
         self.device = device
         self.save_dir = save_dir
-
+        self.train_size = train_size
+        self.val_size = val_size
         self.train_loader = train_loader
         self.val_loader = val_loader
+        # with open('3_loader.pkl' , 'wb') as f:
+        #     pickle.dump(self.train_loader , f)
+        self.losser = DirectionLoss()
+
+    def deal_batch_angle(self , batch_angle):
+        # batch_angle: (batch , 1)
+        return torch.stack([torch.tensor((i.item()-30 , i.item()+30) , dtype=float) for i in batch_angle])
+    
+    # def angle_error(self, angle_predict , batch_angle):
+    #     return torch.nn.ReLU(angle_predict - batch_angle)
+    # def compute_loss_by_guss(self , angle_predict , batch_angle):
+    #     # angle_pre[0] for i in angle_predict
+    #     # batch_angle[0]
+    #     self.guss(angle , lable)
+    
+    # def guss(self , angle , lable):
+    #     error = lable - angle
+    #     loss = 
+    # def bounded_mse_loss(self , pred, target, tol=30):  # 容忍 ±30°
+    #     diff = torch.remainder(pred - target + 180.0, 360.0) - 180.0
+    #     # 超出容忍区间的才计算惩罚
+    #     penalty = torch.clamp(torch.abs(diff) - tol, min=0.0)
+    #     return torch.mean(penalty ** 2)
+
     def train(self):
         global_step = 0
 
         for ep in range(self.epoch):
             local_step = 0
-            epoch_loss = 0.0
-            pbar = tqdm(self.train_loader, desc=f"Epoch {ep+1}/{self.epoch}")
-
-            for batch in pbar:
+            epoch_angle_loss = 0.0
+            
+            for batch in self.train_loader:
                 # unpack 数据
-                if isinstance(batch, (list, tuple)) and len(batch) >= 3:
-                    batch_visual, batch_audio, batch_action = batch
-                    batch_visual, batch_audio = batch_visual.to(self.device), batch_audio.to(self.device)
-                else:
-                    raise ValueError("训练数据格式不正确，应为 (visual, audio, label) 三元组")
-                
-                batch_action = torch.tensor([int(a) for a in batch_action], dtype=torch.long).to(self.device)
+                    # batch_visual, batch_audio, batch_action , batch_angle = batc
+                batch_audio , batch_angle = batch
+                batch_audio = batch_audio.float().to(self.device)
+                batch_angle = batch_angle.float().to(self.device)
 
-                
+                # batch_angle = self.deal_batch_angle(batch_angle).float().to(self.device)
 
 
-                outputs = self.train_model(batch_audio, batch_visual)
-                loss = F.cross_entropy(outputs, batch_action)
-
+                # import pdb;pdb.set_trace()
+                angle_predict = self.train_model(batch_audio)
+                # error = self.angle_error(angle_predict.squeeze(1) , batch_angle)
+                # loss_angle = F.mse_loss(angle_predict.squeeze(1) , batch_angle)
+                # loss_angle = self.bounded_mse_loss(angle_predict , batch_angle)
+                loss_angle , label  = self.losser(angle_predict , batch_angle)
+                # loss_angle = self.compute_loss_by_guss(angle_predict , batch_angle)
+                # loss = loss_angle
                 self.optimizer.zero_grad()
-                loss.backward()
+                loss_angle.backward()
                 self.optimizer.step()
-                
-                tqdm.write(f"Epoch {ep}, Step {global_step}, Loss: {loss:.6f}")
-                epoch_loss += loss.item()
+                preds = angle_predict.argmax(dim=1)
+                correct = (preds == label).sum() / batch_angle.shape[0]
+                print(f"Epoch {ep}, Step {global_step} , angle loss {loss_angle:.6f}")
+                epoch_angle_loss += loss_angle.item()
 
                 if self.writer:
-                    self.writer.add_scalar("Loss/step", loss.item(), global_step)
-                    
-                if global_step % 100 == 0:
-                    self.validate(global_step)
-                if global_step % 1000 == 0:
-                    save_path = f"{self.save_dir}/model_epoch_{global_step}.pth"
-                    torch.save(self.train_model.state_dict(), save_path)
-                    tqdm.write(f"Saved model checkpoint to {save_path}")
+                    self.writer.add_scalar("Loss/step_angle", loss_angle.item(), global_step)
+                    self.writer.add_scalar("Loss/step_acc" , correct , global_step)
                 global_step += 1
                 local_step += 1
-                pbar.set_postfix(loss=loss.item())
 
-            avg_loss = epoch_loss / local_step
+                # if global_step % 500 == 0:
+                #     self.validate(global_step)
+            self.validate(ep)
+
+
+            avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
-                self.writer.add_scalar("Loss/epoch", avg_loss, ep)
+                self.writer.add_scalar("Loss/epoch_angle", avg_angle_loss, ep)
+            print(f"Epoch {ep+1} finished, average angle loss: {avg_angle_loss:.4f}")
+            if (ep + 1) % 50 == 0:
+                save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
+                torch.save(self.train_model.state_dict(), save_path)
+                tqdm.write(f"Saved model checkpoint to {save_path}")
 
-            tqdm.write(f"Epoch {ep+1} finished, average loss: {avg_loss:.4f}")
-
-
-    def validate(self, epoch):
+    def validate(self, step):
         self.train_model.eval()
-        correct = 0
         total = 0
-        val_action_loss = 0.0
+        val_angle_loss = 0.0
+        total_acc = 0.0
+        correct = 0
         with torch.no_grad():
             for batch in self.val_loader:
-                if isinstance(batch, (list, tuple)) and len(batch) >= 3:
-                    batch_visual, batch_audio, batch_action = batch
-                    batch_visual, batch_audio = batch_visual.to(self.device).squeeze(0), batch_audio.to(self.device).squeeze(0)
-                    # batch_angle = batch_angle.float().to(self.device)
-                else:
-                    raise ValueError("验证数据格式不正确，应为 (visual, audio, label) 三元组")
+                batch_audio , batch_angle = batch
+                batch_audio = batch_audio.to(self.device)
+                batch_angle = batch_angle.float().to(self.device)
 
-                batch_action = torch.tensor([int(a) for a in batch_action], dtype=torch.long).to(self.device)
-
-                action_predict  = self.train_model(batch_audio, batch_visual)
-                action_loss = F.cross_entropy(action_predict, batch_action)
+                # batch_angle = self.deal_batch_angle(batch_angle).float().to(self.device)
+                angle_predict = self.train_model(batch_audio)
                 # angle_loss = F.mse_loss(angle_predict.squeeze(1) , batch_angle)
+                # angle_loss = self.bounded_mse_loss(angle_predict , batch_angle)
+                angle_loss ,label = self.losser(angle_predict , batch_angle)
+                
+                val_angle_loss += angle_loss.item()
+                preds = angle_predict.argmax(dim=1)  # [batch]
+                correct += (preds == label).sum().item()
 
-                val_action_loss += action_loss.item()
-                preds = action_predict.argmax(dim=1)  # [batch]
-                correct += (preds == batch_action).sum().item()
-                total += batch_action.size(0)
 
-        acc = correct / total if total > 0 else 0
-        avg_action_loss = val_action_loss / len(self.val_loader)
-        print(f"[Val] Epoch {epoch+1}: Loss={avg_action_loss:.4f}, Acc={acc:.4f}")
+        avg_angle_loss = val_angle_loss / len(self.val_loader)
+        total_acc = correct / self.val_size
 
         if self.writer:
-            self.writer.add_scalar("Val/action_loss", avg_action_loss, epoch)
-            self.writer.add_scalar("Val/Acc", acc, epoch)
-
+            self.writer.add_scalar("Val/angle_loss", avg_angle_loss, step)
+            self.writer.add_scalar("Val/acc", total_acc, step)
         self.train_model.train()
-
-
-
-
-
 

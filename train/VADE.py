@@ -13,44 +13,54 @@ import numpy as np
 from PIL import Image
 import random
 from network.foundation_model import Network
-
+import glob
 class LoadLmdb:
 
     def __init__(self, path):
 
         self.paths = self._deal_path(path)
-
-
+        
+        
     @classmethod
-    def load_lmdb(cls,paths):
+    def get_files(cls , path):
+        import os
+        # 获取到object的路径
+        object_name_files = [os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"]
+        files = []
+        for scene in object_name_files:
+            files.extend([os.path.join(scene , i) for i in os.listdir(scene)])
+        return files
+    @classmethod
+    def load_lmdb(cls,path , config):
         
         # 这里看需不需要使用这个dealpath ，也可以在外部处理，如果文件层级简单的话推荐使用内部的
         # paths = cls._deal_path(paths)
-        dataset_name = input("please input the dataset name:")
-        env = lmdb.open(f"./experiment/dataset/{dataset_name}", map_size=1024*1014*1024*30)
+        
+        paths = cls.get_files(path=path)
+        os.makedirs(config.LMDB.TO_PATH , exist_ok=True)
+        env = lmdb.open(config.LMDB.TO_PATH, map_size=1024*1014*1024*30)
         sum_index = 0
         txn = env.begin(write=True) 
-        eps = 0.9 # 90%的概率丢弃lable为0的数据
         for path_i in tqdm(paths):
             with open(path_i ,'rb') as f:
                 
                 data = pickle.load(f)
+            obs = data['obs'][:-1] # drop -1 step
+            sound_id = data['sound_id']
+            action_id = data['action_id'][0]
+            
+            for index in range(len(obs)):
+                
+                key = f'index_{sum_index}'.encode('utf-8')
+                # spectrogram , audio , visual , angle , sound_name , action
+                values = (obs[index]["spectrogram"][0] , obs[index]['spectrogram'][1] , obs[index]['rgb'] , obs[index]['angle'] , sound_id , action_id[index])
+                values = pickle.dumps(values)
+                txn.put(key, values)
+                sum_index+=1
 
-                audio , visual , action  = cls.get_values_tuple(data)
-                for index in range(len(audio)):
-                    
-                    if action[index] == 0 and random.random() < eps:
-                        tqdm.write((f"丢去0 label"))
-                        continue
-                    key = f'index_{sum_index}'.encode('utf-8')
-                    values = (audio[index],visual[index] , action[index])
-                    values = pickle.dumps(values)
-                    txn.put(key, values)
-                    sum_index+=1
-
-                    if sum_index % 5000 == 0: 
-                        txn.commit()
-                        txn = env.begin(write=True)
+                if sum_index % 5000 == 0: 
+                    txn.commit()
+                    txn = env.begin(write=True)
         
         # 在内部设置了长度大小
         key = f'__len__'.encode('utf-8')
@@ -58,7 +68,7 @@ class LoadLmdb:
         txn.put(key , len_)
         txn.commit()
         env.close()
-        print(f"dataset location the ./experiment/dataset/{dataset_name}")
+        print(f"dataset location the {config.LMDB.TO_PATH}")
 
     @classmethod
     def load_lmdb_offline_rl(cls, paths):
@@ -106,7 +116,61 @@ class LoadLmdb:
         print(f"dataset location the ./experiment/dataset/{dataset_name}")
 
     @classmethod
+    def load_pt(cls , path , config):
+        files = cls.get_files(path=path)
+        os.makedirs(config.LMDB.TO_PATH , exist_ok=True)
+        shard_size = 10000  # 每个 shard 1w 样本
+        shard_id = 0
+
+        buffer_visuals, buffer_audios, buffer_actions , buffer_angles = [], [], [] , []
+
+        for file in tqdm(files):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+         
+            obs = data['obs']
+            
+
+            action_id = data['action_id']
+            action_id = np.array(action_id).reshape(-1).tolist()
+            for v, a in zip(obs[:-1], action_id):
+                visual = torch.from_numpy(v['rgb']).float() / 255.0
+                audio = torch.from_numpy(v['spectrogram'][0]).float()
+                
+                action = torch.tensor(a, dtype=torch.long)
+                angel = np.degrees(v['angle'][1])
+                buffer_visuals.append(visual)
+                buffer_audios.append(audio)
+                buffer_actions.append(action)
+                buffer_angles.append(torch.tensor(angel))
+                # 写一个 shard
+                if len(buffer_visuals) >= shard_size:
+                    torch.save({
+                        'visuals': torch.stack(buffer_visuals),
+                        'audios': torch.stack(buffer_audios),
+                        'actions': torch.stack(buffer_actions),
+                        'angles':torch.stack(buffer_angles)
+                    }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+
+                    print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
+
+                    buffer_visuals, buffer_audios, buffer_actions = [], [], []
+                    shard_id += 1
+
+        # 保存最后一个不满 shard 的数据
+        if buffer_visuals:
+            torch.save({
+                'visuals': torch.stack(buffer_visuals),
+                'audios': torch.stack(buffer_audios),
+                'actions': torch.stack(buffer_actions),
+                'angles':torch.stack(buffer_angles)
+            }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+            print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
+            
+    @classmethod
     def get_values_tuple(cls, data):
+        import pdb;pdb.set_trace()
+        obs = data['obs']
         audio = data[0][0]['audio'][:-1]
         visual = data[0][0]['camera'][:-1]
         action = data[0][0]['rl_pred']
@@ -184,11 +248,11 @@ class VADE(Dataset):
             raise IndexError(f"Index {index} not found in LMDB dataset")
 
         sample = pickle.loads(value)
-        visual , audio  , action = sample
+        spectrogram , audio , visual , angle , sound_name , action = sample
+        angle = np.degrees(angle[1])
+        # visual , audio= self._deal_datas(visual,audio)
 
-        visual , audio= self._deal_datas(visual,audio)
-
-        return visual ,audio  ,action
+        return spectrogram , angle
 
     def __len__(self):
         length_key = b'__len__'
@@ -254,49 +318,108 @@ class VADE_Offline(Dataset):
         length = self.txn.get(length_key)
         r = pickle.loads(length)
         return r
-        
-    # def audio_mask(self , audio):
-    #     """
-    #     输入:
-    #         audio: np.ndarray of shape (2, length)
-    #     返回:
-    #         masked: shape (2, length)，只保留被 mask 的通道，其他为 0
-    #         keeped: shape (2, length)，只保留未被 mask 的通道，其他为 0
-    #     """
-    #     assert audio.shape[0] == 2, "输入必须是双通道音频"
-    #     length = audio.shape[1]
-
-    #     c = random.randint(0, 1)  # 0 或 1，表示被 mask 的通道
-
-    #     masked = np.zeros_like(audio)
-    #     keeped = np.zeros_like(audio)
-
-    #     masked[c] = audio[c]          # 被 mask 的通道值复制
-    #     keeped[1 - c] = audio[1 - c]  # 未被 mask 的通道值复制
-
-    #     return masked, keeped
 
 
+class ShardedPTDataset(Dataset):
+    def __init__(self, shard_pattern, preload=True):
+        super().__init__()
+        self.shard_files = sorted(glob.glob(shard_pattern))
+        assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
 
-######
-#test#
-######
+        self.preload = preload
+        self.shards = []   # 存 torch.load 的结果（如果 preload=True）
+        self.shard_sizes = []  # 每个 shard 的样本数
+        self.index_map = []    # 全局 index → (shard_id, local_index)
 
+        # 扫描每个 shard
+        for shard_id, shard_file in enumerate(self.shard_files):
+            print(f"scan shard id {shard_id}")
+            data = torch.load(shard_file, map_location="cpu")
+            size = len(data["actions"])
+            self.shard_sizes.append(size)
 
-def get_lmdb(path):
+            # 构建 index map
+            for i in range(size):
+                self.index_map.append((shard_id, i))
 
-    # get 到所有的pickle 文件
-    files = get_files(path)
-    # 写入数据库数据
-    LoadLmdb.load_lmdb(files)
-    
-def get_files(path):
-    import os
-    # 获取到object的路径
-    object_name_files = [os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"]
+            if preload:
+                self.shards.append(data)  # 直接放内存
+            else:
+                self.shards.append(None)  # 占位
 
-    return object_name_files
+        self.total_size = sum(self.shard_sizes)
 
-if __name__ == "__main__":
-    data_path = './experiment/data/soundspaces_val'
-    get_lmdb(path=data_path)
+    def __len__(self):
+        return self.total_size
+
+    def __getitem__(self, index):
+        shard_id, local_idx = self.index_map[index]
+
+        # 如果没预加载，就临时加载这个 shard
+        if self.shards[shard_id] is None:
+            data = torch.load(self.shard_files[shard_id], map_location="cpu")
+            self.shards[shard_id] = data
+        else:
+            data = self.shards[shard_id]
+
+        visual = data["visuals"][local_idx]
+        audio = data["audios"][local_idx]
+        action = data["actions"][local_idx]
+        angle = data['angles'][local_idx]
+        return  audio, angle
+      
+class ShardedPTDatasetOffline(Dataset):
+    def __init__(self, shard_pattern="./dataset/pt/offline/offline_model_shard_*.pt", preload=True):
+        """
+        shard_pattern: shard 文件路径模式，比如 ./dataset/pt/foundation_model_shard_*.pt
+        preload: 是否把所有 shard 一次性加载到内存（大数据集建议 False）
+        """
+        super().__init__()
+        self.shard_files = sorted(glob.glob(shard_pattern))
+        assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
+
+        self.preload = preload
+        self.shards = []   # 存 torch.load 的结果（如果 preload=True）
+        self.shard_sizes = []  # 每个 shard 的样本数
+        self.index_map = []    # 全局 index → (shard_id, local_index)
+
+        # 扫描每个 shard
+        for shard_id, shard_file in enumerate(self.shard_files):
+            print(f"scan shard id {shard_id} ...")
+            data = torch.load(shard_file, map_location="cpu")
+            size = len(data["actions"])
+            self.shard_sizes.append(size)
+
+            # 构建 index map
+            for i in range(size):
+                self.index_map.append((shard_id, i))
+
+            if preload:
+                self.shards.append(data)  # 直接放内存
+            else:
+                self.shards.append(None)  # 占位
+
+        self.total_size = sum(self.shard_sizes)
+        print(f"Total samples: {self.total_size}")
+
+    def __len__(self):
+        return self.total_size
+
+    def __getitem__(self, index):
+        shard_id, local_idx = self.index_map[index]
+
+        # 如果没预加载，就临时加载这个 shard
+        if self.shards[shard_id] is None:
+            data = torch.load(self.shard_files[shard_id], map_location="cpu")
+            self.shards[shard_id] = data
+        else:
+            data = self.shards[shard_id]
+
+        # 取出一个 transition
+        state       = data["states"][local_idx]
+        next_state  = data["next_states"][local_idx]
+        action      = data["actions"][local_idx]
+        reward      = data["rewards"][local_idx]
+        done        = data["dones"][local_idx]
+
+        return state, action, reward, next_state, done

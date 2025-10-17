@@ -34,7 +34,7 @@ TASK:
     DRAW_SHORTEST_PATH: True
     
 COLLECT:
-  OPEN: True
+  OPEN: False
   TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[]}
   DATA_DIR: "dataset/pickle/v2/greedy(angle_val)" #"pickle/greedy"
@@ -46,10 +46,18 @@ TRAIN:
   TYPE: "foundation"
   EXPERIMENT_LOSS_DIR: "experiment/loss"
   EXPERIMENT_CKPT_DIR: "experiment/ckpt"
-  TRAIN_DATASET: "dataset/lmdb/v2/"
-  VAL_DATASET: "dataset/lmdb/v2/"
+  TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
+  VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 1000
   BATCH_SIZE: 128
+  train_shard_pattern: "dataset/pt/v2/greedy(angle_train)/foundation_model_shard_0.pt"
+  val_shard_pattern: "dataset/pt/v2/greedy(angle_val)/foundation_model_shard_0.pt"
+
+LMDB:
+  OPEN: False
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(angle_train)"
+  TO_PATH: "dataset/pt/v2/greedy(angle_train)"
+
 
 DATASET:
   TYPE: "AudioNav"

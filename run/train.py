@@ -1,5 +1,6 @@
 from train import foundation_train
 from train import VADE
+from train import ShardedPTDataset
 import torch
 import torch.optim as optim
 import torch
@@ -21,11 +22,11 @@ def Train(model , config , device = None):
     
     writer = SummaryWriter(log_dir=config.EXPERIMENT_LOSS_DIR)
     
-    train_dataset = VADE(path=config.TRAIN_DATASET)
-    val_dataset = VADE(path = config.VAL_DATASET)
+    train_dataset = ShardedPTDataset(shard_pattern=config.train_shard_pattern)
+    val_dataset = ShardedPTDataset(shard_pattern=config.val_shard_pattern)
     print(train_dataset.__len__())
     print(val_dataset.__len__())
-    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True , num_workers=8, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True ,  pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , num_workers=8, pin_memory=True)
     trainer = foundation_train(
         model=model,
@@ -35,6 +36,8 @@ def Train(model , config , device = None):
         epoch=config.EPOCH,
         writer=writer,
         device=device,
-        save_dir = save_dir
+        save_dir = save_dir,
+        train_size=train_dataset.__len__(),
+        val_size=val_dataset.__len__()
     )
     trainer.train()

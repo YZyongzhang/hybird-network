@@ -1,6 +1,8 @@
 import sys
  
-from module import *
+import torch
+import torch.nn as nn
+from network.ViT import ViTEncoder
 
 class Attention(nn.Module):
     def __init__(self , input_dim , visual_dim , audio_dim ,hidden_dim, output_dim):

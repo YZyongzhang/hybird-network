@@ -1,1 +1,1 @@
-from RL_env import AudioNavRLEnv as Env
+from env.RL_env import AudioNavRLEnv as Env
