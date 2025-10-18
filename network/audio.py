@@ -75,10 +75,10 @@ class AudioCRNN(nn.Module):
         layer_init(self.fnn)
 
     def forward(self, audio):
-        # import pdb;pdb.set_trace()
+        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         audio = audio.permute(0, 3, 1, 2)
         x = self.cnn(audio)
         x = self.attn.forward(x, x, x)
-        # x = x.squeeze(1)
-        # x = self.fnn(x)
+        x = x.squeeze(1)
+        x = self.fnn(x)
         return x

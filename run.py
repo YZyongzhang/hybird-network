@@ -17,13 +17,23 @@ if __name__ == "__main__":
     elif task_config.LMDB.OPEN :
         from train import LoadLmdb
         LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
-    elif task_config.TRAIN.TYPE == "foundation":
-        from network import Network
-        from network import AudioCRNN
-        # from network import AngleProdict
-        from run import Train
-        model = Network()
-        Train(model=model , config=task_config.TRAIN)
+    
+    elif task_config.TRAIN.OPEN:
+        train_config = task_config.TRAIN
+        if train_config.TYPE == "HybirdNetworkAudio":
+            from network import AudioCRNN
+            from run import Train
+            from train import HybirdNetworkAudioTrain
+            model = AudioCRNN()
+            Train(model=model , trainer=HybirdNetworkAudioTrain , config=train_config)
+        elif train_config.TYPE == "HybirdNetwork":
+            from network import HybirdNetwork
+            from run import Train
+            from train import HybirdNetworkTrain
+            model = HybirdNetwork()
+            Train(model=model , trainer=HybirdNetworkTrain , config=train_config)
+        elif train_config.TYPE == "OfflineRL":
+            pass
     
         
         

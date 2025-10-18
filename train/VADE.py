@@ -118,6 +118,7 @@ class LoadLmdb:
     @classmethod
     def load_pt(cls , path , config):
         files = cls.get_files(path=path)
+        random.shuffle(files)
         os.makedirs(config.LMDB.TO_PATH , exist_ok=True)
         shard_size = 10000  # 每个 shard 1w 样本
         shard_id = 0
@@ -134,9 +135,9 @@ class LoadLmdb:
             action_id = data['action_id']
             action_id = np.array(action_id).reshape(-1).tolist()
             for v, a  , info in zip(obs[1:-1], action_id[1:] , data['info']):
-                if info['distance_to_goal'] > 8.0:
-                    tqdm.write(f"distence is {info['distance_to_goal']} , drop")
-                    continue
+                # if info['distance_to_goal'] > 8.0:
+                #     tqdm.write(f"distence is {info['distance_to_goal']} , drop")
+                #     continue
                 visual = torch.from_numpy(v['rgb']).float() / 255.0
                 audio = torch.from_numpy(v['spectrogram'][0]).float()
                 
@@ -157,7 +158,7 @@ class LoadLmdb:
 
                     print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
 
-                    buffer_visuals, buffer_audios, buffer_actions = [], [], []
+                    buffer_visuals, buffer_audios, buffer_actions , buffer_angles = [], [], [] , []
                     shard_id += 1
 
         # 保存最后一个不满 shard 的数据
@@ -328,7 +329,6 @@ class ShardedPTDataset(Dataset):
         super().__init__()
         self.shard_files = sorted(glob.glob(shard_pattern))
         assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
-
         self.preload = preload
         self.shards = []   # 存 torch.load 的结果（如果 preload=True）
         self.shard_sizes = []  # 每个 shard 的样本数

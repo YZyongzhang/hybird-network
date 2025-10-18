@@ -1,4 +1,3 @@
-from train import foundation_train
 from train import VADE
 from train import ShardedPTDataset
 import torch
@@ -7,8 +6,7 @@ import torch
 import os
 from torch.utils.data import Dataset , DataLoader
 import pickle
-def Train(model , config , device = None):
-    
+def Train(model ,trainer , config , device = None):
     from torch.utils.tensorboard import SummaryWriter
     
     if device is not None:
@@ -28,9 +26,12 @@ def Train(model , config , device = None):
     print(val_dataset.__len__())
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True ,  pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , pin_memory=True)
-    with open('loader.pkl' , 'wb') as f:
-        pickle.dump(val_loader , f)
-    trainer = foundation_train(
+    if config.SAVE_LOADER:
+        with open('val_loader.pkl' , 'wb') as f:
+            pickle.dump(val_loader , f)
+        with open('train_loader.pkl' , 'wb') as f:
+            pickle.dump(train_loader , f)
+    trainer = trainer(
         model=model,
         Adam=optimizer,
         train_loader=train_loader,

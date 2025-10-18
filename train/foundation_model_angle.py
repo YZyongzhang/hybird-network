@@ -78,7 +78,6 @@ class Train:
                 loss_angle.backward()
                 self.optimizer.step()
                 preds = angle_predict.argmax(dim=1)
-                
                 diff = torch.abs(preds - label)
 
                 dist = torch.minimum(diff, 8 - diff)
@@ -124,11 +123,10 @@ class Train:
                 # angle_loss = F.mse_loss(angle_predict.squeeze(1) , batch_angle)
                 # angle_loss = self.bounded_mse_loss(angle_predict , batch_angle)
                 angle_loss ,label = self.losser(angle_predict , batch_angle)
-                
                 val_action_loss += angle_loss.item()
                 preds = angle_predict.argmax(dim=1)  # [batch]
                 diff = torch.abs(preds - label)
-
+                
                 dist = torch.minimum(diff, 8 - diff)
 
                 correct += (dist <= 1).sum().item()

@@ -43,20 +43,21 @@ COLLECT:
 
 TRAIN:
   OPEN: True
-  TYPE: "foundation"
-  EXPERIMENT_LOSS_DIR: "experiment/loss/visual/8"
-  EXPERIMENT_CKPT_DIR: "experiment/ckpt/visual"
+  SAVE_LOADER: False
+  TYPE: "HybirdNetworkAudio"
+  EXPERIMENT_LOSS_DIR: "experiment/loss/audio"
+  EXPERIMENT_CKPT_DIR: "experiment/ckpt/audio"
   TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 1000
   BATCH_SIZE: 128
-  train_shard_pattern: "dataset/pt/v2/greedy(angle_train)/foundation_model_shard_0.pt"
+  train_shard_pattern: "dataset/pt/v2/greedy(angle_train)/foundation_model_shard_1.pt"
   val_shard_pattern: "dataset/pt/v2/greedy(angle_val)/foundation_model_shard_*.pt"
 
 LMDB:
   OPEN: False
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(angle_val)"
-  TO_PATH: "dataset/pt/v2/greedy(angle_val_short_distence_8)"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(angle_train)"
+  TO_PATH: "dataset/pt/v2/greedy(angle_train)"
 
 
 DATASET:
