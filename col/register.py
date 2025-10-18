@@ -228,7 +228,7 @@ class OfflineCollect:
                 
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)
-                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                self.store("greedy" , self.env._env.current_episode.scene_id , self.env._env.current_episode)
                 
             elif epsilon >= 0.4 and epsilon < 0.8:
                 # hybird network 
@@ -260,7 +260,7 @@ class OfflineCollect:
                 
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)
-                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                self.store("hybird" , self.env._env.current_episode.scene_id , self.env._env.current_episode)
                 
             elif epsilon >= 0.8 :
                 self.save_data = copy.deepcopy(self.save_data_struct)
@@ -282,13 +282,13 @@ class OfflineCollect:
                 
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)
-                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                self.store("random" , self.env._env.current_episode.scene_id , self.env._env.current_episode)
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
-    def store(self, scene , id):
-        os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
+    def store(self, level , scene , id):
+        os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
-        with open(f"{self.save_data_dir}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
+        with open(f"{self.save_data_dir}/{level}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
             pickle.dump(self.save_data , f)
         self.save_data = None
