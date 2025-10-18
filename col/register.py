@@ -1,6 +1,7 @@
 """
 REGISTER
 """
+import torch
 from habitat import Config
 from ss_baselines.common.environments import AudioNavRLEnv
 from soundspaces import SoundSpacesSim
@@ -183,6 +184,105 @@ class RandomCollect:
             self.save(collided_path_point=collided_path_point)
             self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
             
+    def save(self , **kwargs):
+        for key , value in kwargs.items():
+            self.save_data[key].append(value)
+    def store(self, scene , id):
+        os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
+        
+        with open(f"{self.save_data_dir}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
+            pickle.dump(self.save_data , f)
+        self.save_data = None
+
+
+@CollectRegister.register("offlineRL")
+class OfflineCollect:
+    def __init__(self , env:AudioNavRLEnv , config:Config , **kwargs):
+        self.env = env
+        self.sim: SoundSpacesSim = env._env._sim
+        self.save_data_struct = config.DATA_STRUCT
+        self.save_data_dir = config.DATA_DIR
+        self.save_path_img = config.IMG_DIR
+        self.save_path_type = config.IMG_TYPE
+        self.hybird_network = kwargs['model']
+    def collect(self):
+        for _ in range(self.env._env.number_of_episodes):
+            # 40% 完全greedy 40% hybirdnetwork 20 % random
+            epsilon = random.random()
+            if epsilon < 0.4:
+                # greedy
+                self.save_data = copy.deepcopy(self.save_data_struct)
+                path_point = []
+                obs = self.env.reset()
+                action_id = self.sim.compute_oracle_actions()
+                done = False
+                self.save(sound_id = self.env._env.current_episode.info['sound'])
+                self.save(obs=obs,action_id=action_id,done=done)
+                path_point.append(self.sim.get_agent_state().position)
+                for action in action_id:
+                    obs , reward , done , info = self.env.step(action=action)
+                    self.save(obs=obs,reward=reward,done=done,info=info)
+                    path_point.append(self.sim.get_agent_state().position)
+                    if action == action_id[-1]:
+                        print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+                
+                self.save(map=draw_map(self.env , path_point))
+                self.save(path_point=path_point)
+                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                
+            elif epsilon >= 0.4 and epsilon < 0.8:
+                # hybird network 
+                self.save_data = copy.deepcopy(self.save_data_struct)
+                path_point = []
+                obs = self.env.reset()
+                action_id = self.sim.compute_oracle_actions()
+                done = False
+                self.save(sound_id = self.env._env.current_episode.info['sound'])
+                self.save(obs=obs,action_id=action_id,done=done)
+                path_point.append(self.sim.get_agent_state().position)
+                for index , action in enumerate(action_id):
+                    if index > int(len(action_id) / 2):
+                        visual = torch.from_numpy(obs['rgb']).float() / 255.0
+                        audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                        logits = self.hybird_network(audio , visual)
+                        action = torch.argmax(logits).item()
+                        obs , reward , done , info = self.env.step(action=action)
+                        self.save(obs=obs,reward=reward,done=done,info=info)
+                        path_point.append(self.sim.get_agent_state().position)
+                        if action == action_id[-1]:
+                            print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+                    else:
+                        obs , reward , done , info = self.env.step(action=action)
+                        self.save(obs=obs,reward=reward,done=done,info=info)
+                        path_point.append(self.sim.get_agent_state().position)
+                        if action == action_id[-1]:
+                            print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+                
+                self.save(map=draw_map(self.env , path_point))
+                self.save(path_point=path_point)
+                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                
+            elif epsilon >= 0.8 :
+                self.save_data = copy.deepcopy(self.save_data_struct)
+                path_point = []
+                obs = self.env.reset()
+                done = False
+                self.save(sound_id = self.env._env.current_episode.info['sound'])
+                self.save(obs=obs,done=done)
+                path_point.append(self.sim.get_agent_state().position)
+                step = 0
+                while step < 50:
+                    action = random.choice([1,2,3])
+                    self.save(action_id = action)
+                    obs , reward , done , info = self.env.step(action=action)
+                    self.save(obs=obs,reward=reward,done=done,info=info)
+                    path_point.append(self.sim.get_agent_state().position)
+                    if action == action_id[-1]:
+                        print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+                
+                self.save(map=draw_map(self.env , path_point))
+                self.save(path_point=path_point)
+                self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
