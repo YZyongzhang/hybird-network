@@ -16,7 +16,7 @@ def Train(model , config , device = None):
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     lr = 1e-5
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     save_dir = config.EXPERIMENT_CKPT_DIR
     os.makedirs(save_dir, exist_ok=True)
     

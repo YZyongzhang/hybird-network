@@ -91,9 +91,10 @@ class Network(nn.Module):
         self.visual_transformer_encoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
         self.audio_encoder = AudioCRNN()
         path = './experiment/store/audio/model_epoch_50.pth'
-        self.audio_encoder.load_state_dict(torch.load(path))
+        self.audio_encoder.load_state_dict(torch.load(path) ,  strict=True)
         self.audio_encoder.eval()
         for param in self.audio_encoder.parameters():
+            
             param.requires_grad = False
 
         self.vaencoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)

@@ -44,7 +44,7 @@ COLLECT:
 TRAIN:
   OPEN: True
   TYPE: "foundation"
-  EXPERIMENT_LOSS_DIR: "experiment/loss/visual/7"
+  EXPERIMENT_LOSS_DIR: "experiment/loss/visual/8"
   EXPERIMENT_CKPT_DIR: "experiment/ckpt/visual"
   TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
