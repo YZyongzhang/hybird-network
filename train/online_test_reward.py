@@ -1,6 +1,5 @@
 import sys
  
-from module import *
 from network.foundation_model import Network
 
 random.seed(int(time.time()))
