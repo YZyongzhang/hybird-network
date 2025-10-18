@@ -3,7 +3,9 @@ import sys
 import torch
 import torch.nn as nn
 from network.ViT import ViTEncoder
-
+from network.audio import AudioCRNN
+from network.ViT import VisualEncoder , PositionalEcoder
+from network.Encoder import Encoder
 class Attention(nn.Module):
     def __init__(self , input_dim , visual_dim , audio_dim ,hidden_dim, output_dim):
         super().__init__()
@@ -60,38 +62,57 @@ class Decision(nn.Module):
 class Finnal_model(nn.Module):
     def __init__(self,input_dim , hidden_dim , output_dim):
         super().__init__()
-        self.input_dim = input_dim
+        self.input_dim = 17*128
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         
         self.dropout = nn.Dropout(0.2)
 
         self.fc1 = nn.Sequential(
+            nn.Flatten(),
             nn.Linear(self.input_dim , self.hidden_dim),
             nn.ReLU(),
             nn.LayerNorm(hidden_dim),
         )
         self.fc2 = nn.Linear(self.hidden_dim, self.output_dim)
 
-    def forward(self,embeding):
-        x1 = self.fc1(embeding)
+    def forward(self,encoder):
+        x1 = self.fc1(encoder)
         x2 = self.dropout(x1)
         x3 = self.fc2(x2)
-        return x1 ,x2 , x3
-    
+        return x3
+
 class Network(nn.Module):
     def __init__(self):
         super().__init__()
-        self.vitpartnet = ViTEncoder()
-        # self.mermory = Mermory(input_dim=128,hidden_dim=128)
-        self.finnal = Finnal_model(input_dim = 512 , hidden_dim=32 , output_dim=4)
+        # self.vitpartnet = ViTEncoder()
+        self.visual_encoder = VisualEncoder()
+        self.add_position = PositionalEcoder()
+        self.visual_transformer_encoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
+        self.audio_encoder = AudioCRNN()
+        # path = './experiment/store/audio/model_epoch_50.pth'
+        # self.audio_encoder.load_state_dict(torch.load(path))
+        # self.audio_encoder.eval()
+        self.vaencoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
+        self.final = Finnal_model(input_dim = 512 , hidden_dim=32 , output_dim=4)
 
 
     def forward(self,audio , visual):
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         visual = visual.permute(0,3, 1, 2)
-        avencoder= self.vitpartnet(audio , visual)
+        
+        audio_encoder = self.audio_encoder(audio)
+        visual_cnn = self.visual_encoder(visual)
+        v_batch , v_dim , v_h , v_w = visual_cnn.shape
+        visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
+        v_position = self.add_position(visual_cnn)
+        visual_cnn = visual_cnn + v_position
+        visual_encoder = self.visual_transformer_encoder(visual_cnn)
+        concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
+        share_visual_audio_encoder = self.vaencoder(concat_encoder)
+        p_share_encoder = self.add_position(share_visual_audio_encoder)
+        share_encoder = share_visual_audio_encoder + p_share_encoder
 
-        x1 , x2 ,finnal_output = self.finnal(avencoder)
+        finnal_output = self.final(share_encoder)
         return finnal_output
         # return attentioned

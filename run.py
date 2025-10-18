@@ -18,10 +18,11 @@ if __name__ == "__main__":
         from train import LoadLmdb
         LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
     elif task_config.TRAIN.TYPE == "foundation":
-        # from network import Network
+        from network import Network
         from network import AudioCRNN
+        # from network import AngleProdict
         from run import Train
-        model = AudioCRNN()
+        model = Network()
         Train(model=model , config=task_config.TRAIN)
     
         

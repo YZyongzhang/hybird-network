@@ -17,26 +17,55 @@ class DirectionLoss(nn.Module):
         self.num_sectors = num_sectors
         self.ce_loss = nn.CrossEntropyLoss()
 
-    def forward(self, sector_logits, true_angle):
-        """
-        sector_logits: [B, num_sectors] 分类 logits
-        delta_pred: [B] 微调预测, 单位 rad
-        true_angle: [B] 真值角度, 单位 rad
-        """
-        # -------------------
-        # 1. 分类标签
-        # -------------------
-        # 将真实角度映射到扇区索引
+    # def forward(self, sector_logits, true_angle):
+    #     """
+    #     sector_logits: [B, num_sectors] 分类 logits
+    #     delta_pred: [B] 微调预测, 单位 rad
+    #     true_angle: [B] 真值角度, 单位 rad
+    #     """
+    #     # -------------------
+    #     # 1. 分类标签
+    #     # -------------------
+    #     # 将真实角度映射到扇区索引
         
-        sector_label = torch.remainder(true_angle + 180, 2*180) // SECTOR_ANGLE
-        sector_label = sector_label.long()
+    #     sector_label = torch.remainder(true_angle + 22.5, 2*180) // SECTOR_ANGLE
+    #     sector_label = sector_label.long()
 
-        # -------------------
-        # 2. 分类 loss
-        # -------------------
-        loss_ce = self.ce_loss(sector_logits, sector_label)
+    #     # -------------------
+    #     # 2. 分类 loss
+    #     # -------------------
+    #     loss_ce = self.ce_loss(sector_logits, sector_label)
 
-        return loss_ce , sector_label
+    #     return loss_ce , sector_label
+        
+    def forward(self,pred, true_angle, N=8):
+        """
+        pred: [batch, N] softmax 概率或 logits
+        true_sector: [batch] 真实扇区编号
+        """
+        true_sector = torch.remainder(true_angle + 22.5, 2*180) // SECTOR_ANGLE
+        true_sector = true_sector.long()
+        batch_size = pred.shape[0]
+        device = pred.device
+        
+        # 先转成 softmax 概率
+        prob = F.softmax(pred, dim=1)
+        
+        total_loss = 0.0
+        for i in range(batch_size):
+            t = true_sector[i]
+            # 对每个可能的预测 sector 计算环形距离
+            idx = torch.arange(N, device=device)
+            dist = torch.abs(idx - t)
+            dist = torch.minimum(dist, N - dist)  # 环形距离
+            
+            # 计算指数惩罚 α
+            alpha = torch.where(dist == 0, torch.zeros_like(dist), 2 ** dist)
+            
+            loss_i = torch.sum(prob[i] * alpha)
+            total_loss += loss_i
+    
+        return total_loss / batch_size , true_sector
 class Train:
     def __init__(self, model, Adam, train_loader,val_loader, epoch, writer, save_dir ,train_size , val_size, device='cuda'):
         self.train_model = model.to(device)
@@ -49,8 +78,7 @@ class Train:
         self.val_size = val_size
         self.train_loader = train_loader
         self.val_loader = val_loader
-        # with open('3_loader.pkl' , 'wb') as f:
-        #     pickle.dump(self.train_loader , f)
+
         self.losser = DirectionLoss()
 
     def deal_batch_angle(self , batch_angle):
@@ -83,31 +111,41 @@ class Train:
             for batch in self.train_loader:
                 # unpack 数据
                     # batch_visual, batch_audio, batch_action , batch_angle = batc
-                batch_audio , batch_angle = batch
-                batch_audio = batch_audio.float().to(self.device)
+                batch_audio , batch_visual , batch_angle , batch_action = batch
+                batch_audio  , batch_visual ,batch_action = batch_audio.to(self.device) , batch_visual.to(self.device) , batch_action.to(self.device)
                 batch_angle = batch_angle.float().to(self.device)
-
+                batch_action = batch_action.long()
                 # batch_angle = self.deal_batch_angle(batch_angle).float().to(self.device)
 
 
                 # import pdb;pdb.set_trace()
-                angle_predict = self.train_model(batch_audio)
-                # error = self.angle_error(angle_predict.squeeze(1) , batch_angle)
+                action_predict = self.train_model(batch_audio , batch_visual)
+                # error = self.angle_error(angle_predict.sque , seze(1) , batch_angle)
                 # loss_angle = F.mse_loss(angle_predict.squeeze(1) , batch_angle)
                 # loss_angle = self.bounded_mse_loss(angle_predict , batch_angle)
-                loss_angle , label  = self.losser(angle_predict , batch_angle)
+                # loss_angle , label  = self.losser(angle_predict , batch_angle)
                 # loss_angle = self.compute_loss_by_guss(angle_predict , batch_angle)
+                loss_action = F.cross_entropy(action_predict , batch_action)
                 # loss = loss_angle
                 self.optimizer.zero_grad()
-                loss_angle.backward()
+                loss_action.backward()
                 self.optimizer.step()
-                preds = angle_predict.argmax(dim=1)
-                correct = (preds == label).sum() / batch_angle.shape[0]
-                print(f"Epoch {ep}, Step {global_step} , angle loss {loss_angle:.6f}")
-                epoch_angle_loss += loss_angle.item()
+                preds = action_predict.argmax(dim=1)
+                
+                # diff = torch.abs(preds - label)
+
+                # 因为是环形的，所以 0 和 7 也是相邻的（取 min(dist, 8 - dist)）
+                # dist = torch.minimum(diff, 8 - diff)
+
+                # 判断是否在相邻范围内
+                # correct = (dist <= 1).sum().item() / batch_angle.shape[0]
+                
+                correct = (preds == batch_action).sum() / batch_angle.shape[0]
+                print(f"Epoch {ep}, Step {global_step} , angle loss {loss_action:.6f}")
+                epoch_angle_loss += loss_action.item()
 
                 if self.writer:
-                    self.writer.add_scalar("Loss/step_angle", loss_angle.item(), global_step)
+                    self.writer.add_scalar("Loss/step_angle", loss_action.item(), global_step)
                     self.writer.add_scalar("Loss/step_acc" , correct , global_step)
                 global_step += 1
                 local_step += 1
@@ -129,31 +167,40 @@ class Train:
     def validate(self, step):
         self.train_model.eval()
         total = 0
-        val_angle_loss = 0.0
+        val_action_loss = 0.0
         total_acc = 0.0
         correct = 0
         with torch.no_grad():
             for batch in self.val_loader:
-                batch_audio , batch_angle = batch
-                batch_audio = batch_audio.to(self.device)
+                batch_audio , batch_visual , batch_angle , batch_action = batch
+                batch_audio  , batch_visual , batch_action = batch_audio.to(self.device) , batch_visual.to(self.device) , batch_action.to(self.device)
                 batch_angle = batch_angle.float().to(self.device)
+                batch_action = batch_action.long()
 
                 # batch_angle = self.deal_batch_angle(batch_angle).float().to(self.device)
-                angle_predict = self.train_model(batch_audio)
+                action_predict = self.train_model(batch_audio , batch_visual)
                 # angle_loss = F.mse_loss(angle_predict.squeeze(1) , batch_angle)
                 # angle_loss = self.bounded_mse_loss(angle_predict , batch_angle)
-                angle_loss ,label = self.losser(angle_predict , batch_angle)
+                # angle_loss ,label = self.losser(angle_predict , batch_angle)
+                action_loss = F.cross_entropy(action_predict , batch_action)
                 
-                val_angle_loss += angle_loss.item()
-                preds = angle_predict.argmax(dim=1)  # [batch]
-                correct += (preds == label).sum().item()
+                val_action_loss += action_loss.item()
+                preds = action_predict.argmax(dim=1)  # [batch]
+                # diff = torch.abs(preds - )
+
+                # 因为是环形的，所以 0 和 7 也是相邻的（取 min(dist, 8 - dist)）
+                # dist = torch.minimum(diff, 8 - diff)
+
+                # 判断是否在相邻范围内
+                # correct += (dist <= 1).sum().item()
+                correct += (preds == batch_action).sum().item()
 
 
-        avg_angle_loss = val_angle_loss / len(self.val_loader)
+        avg_action_loss = val_action_loss / len(self.val_loader)
         total_acc = correct / self.val_size
 
         if self.writer:
-            self.writer.add_scalar("Val/angle_loss", avg_angle_loss, step)
+            self.writer.add_scalar("Val/angle_loss", avg_action_loss, step)
             self.writer.add_scalar("Val/acc", total_acc, step)
         self.train_model.train()
 

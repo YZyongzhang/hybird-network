@@ -4,7 +4,7 @@ import sys
 from ss_baselines.common.environments import AudioNavRLEnv
 # from configs.default import get_config
 # from habitat.datasets import make_dataset
-# from soundspaces.datasets.audionav_dataset import AudioNavDataset
+from soundspaces.datasets.audionav_dataset import AudioNavDataset
 
 # config = get_config()
 

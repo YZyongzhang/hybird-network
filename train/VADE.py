@@ -133,7 +133,10 @@ class LoadLmdb:
 
             action_id = data['action_id']
             action_id = np.array(action_id).reshape(-1).tolist()
-            for v, a in zip(obs[:-1], action_id):
+            for v, a  , info in zip(obs[1:-1], action_id[1:] , data['info']):
+                if info['distance_to_goal'] > 8.0:
+                    tqdm.write(f"distence is {info['distance_to_goal']} , drop")
+                    continue
                 visual = torch.from_numpy(v['rgb']).float() / 255.0
                 audio = torch.from_numpy(v['spectrogram'][0]).float()
                 
@@ -366,7 +369,8 @@ class ShardedPTDataset(Dataset):
         audio = data["audios"][local_idx]
         action = data["actions"][local_idx]
         angle = data['angles'][local_idx]
-        return  audio, angle
+        std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        return  std_audio, visual , angle , action
       
 class ShardedPTDatasetOffline(Dataset):
     def __init__(self, shard_pattern="./dataset/pt/offline/offline_model_shard_*.pt", preload=True):

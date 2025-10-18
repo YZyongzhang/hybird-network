@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch
 import os
 from torch.utils.data import Dataset , DataLoader
-
+import pickle
 def Train(model , config , device = None):
     
     from torch.utils.tensorboard import SummaryWriter
@@ -27,7 +27,9 @@ def Train(model , config , device = None):
     print(train_dataset.__len__())
     print(val_dataset.__len__())
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True ,  pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , num_workers=8, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , pin_memory=True)
+    with open('loader.pkl' , 'wb') as f:
+        pickle.dump(val_loader , f)
     trainer = foundation_train(
         model=model,
         Adam=optimizer,

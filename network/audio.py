@@ -56,6 +56,7 @@ class AudioCRNN(nn.Module):
             Flatten(),
             nn.Linear(64 * cnn_dimensions[0] * cnn_dimensions[1], 128),
             nn.ReLU(),
+            nn.LayerNorm(128),
             nn.Dropout(0.2)
         )
         self.attn = MultiHeadAttentionLayer(
@@ -66,6 +67,7 @@ class AudioCRNN(nn.Module):
         self.fnn = nn.Sequential(
             nn.Linear(128, 64),
             nn.ReLU(),
+            nn.LayerNorm(64),
             nn.Linear(64, 8),
         )
     
@@ -76,7 +78,7 @@ class AudioCRNN(nn.Module):
         # import pdb;pdb.set_trace()
         audio = audio.permute(0, 3, 1, 2)
         x = self.cnn(audio)
-        # x = self.attn.forward(x, x, x)
-        x = x.squeeze(1)
-        x = self.fnn(x)
+        x = self.attn.forward(x, x, x)
+        # x = x.squeeze(1)
+        # x = self.fnn(x)
         return x
