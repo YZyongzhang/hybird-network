@@ -3,7 +3,7 @@ logger = logging.getLogger("train")
 logger.setLevel(logging.INFO)
 
 # 创建文件 handler
-file_handler = logging.FileHandler("log.txt", mode="a", encoding="utf-8")
+file_handler = logging.FileHandler("log.txt", mode="w", encoding="utf-8")
 file_handler.setLevel(logging.INFO)
 
 # 设置日志格式

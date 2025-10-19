@@ -218,8 +218,9 @@ class LoadLmdb:
                 audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
 
                 # 编码成状态向量
-                state = model.embedding_forward(audio_now.to(model.device), visual_now.to(model.device))
-                next_state = model.embedding_forward(audio_next.to(model.device), visual_next.to(model.device))
+                with torch.no_grad():
+                    state = model.embedding_forward(audio_now.to(model.device), visual_now.to(model.device))
+                    next_state = model.embedding_forward(audio_next.to(model.device), visual_next.to(model.device))
 
                 buffer_states.append(state)
                 buffer_next_states.append(next_state)
@@ -231,13 +232,13 @@ class LoadLmdb:
                 if len(buffer_states) >= shard_size:
                     shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
                     torch.save({
-                        'state': torch.stack(buffer_states),
-                        'next_state': torch.stack(buffer_next_states),
-                        'action': torch.stack(buffer_actions),
-                        'reward': torch.stack(buffer_rewards),
-                        'done': torch.stack(buffer_dones)
+                        'states': torch.stack(buffer_states),
+                        'next_states': torch.stack(buffer_next_states),
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
                     }, shard_path)
-                    print(f"✅ 保存 shard {shard_id}, size={len(buffer_states)}")
+                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
 
                     # 清空缓存
                     buffer_states, buffer_next_states = [], []
@@ -248,13 +249,13 @@ class LoadLmdb:
         if buffer_states:
             shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
             torch.save({
-                'state': torch.stack(buffer_states),
-                'next_state': torch.stack(buffer_next_states),
-                'action': torch.stack(buffer_actions),
-                'reward': torch.stack(buffer_rewards),
-                'done': torch.stack(buffer_dones)
+                'states': torch.stack(buffer_states),
+                'next_states': torch.stack(buffer_next_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
             }, shard_path)
-            print(f"✅ 保存 shard {shard_id}, size={len(buffer_states)}")   
+            print(f"保存 shard {shard_id}, size={len(buffer_states)}")   
     @classmethod
     def get_values_tuple(cls, data):
         import pdb;pdb.set_trace()
@@ -494,6 +495,7 @@ class ShardedPTDatasetOffline(Dataset):
         return self.total_size
 
     def __getitem__(self, index):
+        
         shard_id, local_idx = self.index_map[index]
 
         # 如果没预加载，就临时加载这个 shard
@@ -509,5 +511,6 @@ class ShardedPTDatasetOffline(Dataset):
         action      = data["actions"][local_idx]
         reward      = data["rewards"][local_idx]
         done        = data["dones"][local_idx]
-
-        return state, action, reward, next_state, done
+        state = state.squeeze(0)
+        next_state = next_state.squeeze(0)
+        return state, next_state , action, reward, done

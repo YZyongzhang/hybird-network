@@ -60,7 +60,7 @@ class Decision(nn.Module):
         return x
     
 class Finnal_model(nn.Module):
-    def __init__(self,input_dim , hidden_dim , output_dim):
+    def __init__(self, input_dim , hidden_dim , output_dim):
         super().__init__()
         self.input_dim = 17*128
         self.hidden_dim = hidden_dim
@@ -75,7 +75,12 @@ class Finnal_model(nn.Module):
             nn.LayerNorm(hidden_dim),
         )
         
-        self.fc2 = nn.Linear(self.hidden_dim, self.output_dim)
+        self.fc2 = nn.Sequential(
+            nn.Linear(self.hidden_dim, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Linear(128, 4)
+        )
 
     def forward(self,encoder):
         x1 = self.fc1(encoder)
@@ -99,7 +104,7 @@ class Network(nn.Module):
             param.requires_grad = False
 
         self.vaencoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
-        self.final = Finnal_model(input_dim = 512 , hidden_dim=32 , output_dim=4)
+        self.final = Finnal_model(input_dim = 512 , hidden_dim= 256 , output_dim=4)
         self.device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
 
     def forward(self,audio , visual):
@@ -144,5 +149,6 @@ class Network(nn.Module):
         p_share_encoder = self.add_position(share_visual_audio_encoder)
         share_encoder = share_visual_audio_encoder + p_share_encoder
         embedding = self.final.fc1(share_encoder)
+        embedding.squeeze(0)
         return embedding
         # return attentioned

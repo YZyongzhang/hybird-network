@@ -100,7 +100,6 @@ class SAC_model(torch.nn.Module):
         next_states = next_states.float().to(self.device)
         rewards = rewards.float().to(self.device)
         # import pdb ; pdb.set_trace()
-        rewards[rewards == 100.0] = 10.0  # 防止除0错误
         dones = dones.float().to(self.device)
         actions = actions.long().to(self.device)
         actions = actions.unsqueeze(1)  # 确保动作是二维的
