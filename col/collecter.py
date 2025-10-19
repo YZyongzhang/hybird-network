@@ -9,12 +9,13 @@ class COLLECTER:
         - random collect
         - colliect collect
     """
-    def __init__(self,config:Config,env:AudioNavRLEnv):
+    def __init__(self,config:Config,env:AudioNavRLEnv , **kwargs):
         self.env = env
         self.collect_config = config.TASK_CONFIG.COLLECT
-        if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle']:
+        if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle' , 'offlineRL']:
             cls = CollectRegister.get(self.collect_config.TYPE)
-            self.collecter = cls(self.env , self.collect_config)
+            
+            self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
         else:
             raise ValueError(f"collect name error!")
     def collect(self):

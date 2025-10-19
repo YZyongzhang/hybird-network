@@ -58,16 +58,16 @@ class Train:
                 global_step += 1
                 local_step += 1
 
-                # if global_step % 500 == 0:
-                #     self.validate(global_step)
-            self.validate(ep)
+                if global_step % 500 == 0:
+                    self.validate(global_step)
+            # self.validate(ep)
 
 
             avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
                 self.writer.add_scalar("Loss/epoch_action", avg_angle_loss, ep)
             print(f"Epoch {ep+1} finished, average action loss: {avg_angle_loss:.4f}")
-            if (ep + 1) % 50 == 0:
+            if (ep + 1) % 5 == 0:
                 save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
                 tqdm.write(f"Saved model checkpoint to {save_path}")

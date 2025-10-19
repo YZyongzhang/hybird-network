@@ -77,7 +77,7 @@ class GreedyCollect:
             action_id = self.sim.compute_oracle_actions()
             done = False
             self.save(sound_id = self.env._env.current_episode.info['sound'])
-            self.save(obs=obs,action_id=action_id,done=done)
+            self.save(obs=obs,action_id=action_id)
             path_point.append(self.sim.get_agent_state().position)
             for action in action_id:
                 obs , reward , done , info = self.env.step(action=action)
@@ -117,7 +117,7 @@ class CollidedCollect:
             obs = self.env.reset()
             
             done = False
-            self.save(obs=obs,done=done)
+            self.save(obs=obs)
             self.save(sound_id = self.env._env.current_episode.sound_id)
             greedy_path_point.append(self.sim.get_agent_state().position)
             while len(self.save_data['done']) < 50 and not done:
@@ -167,7 +167,7 @@ class RandomCollect:
             obs = self.env.reset()
             
             done = False
-            self.save(obs=obs,done=done)
+            self.save(obs=obs)
             self.save(sound_id = self.env._env.current_episode.sound_id)
             greedy_path_point.append(self.sim.get_agent_state().position)
             while len(self.save_data['done']) < 50 and not done:
@@ -217,7 +217,7 @@ class OfflineCollect:
                 action_id = self.sim.compute_oracle_actions()
                 done = False
                 self.save(sound_id = self.env._env.current_episode.info['sound'])
-                self.save(obs=obs,action_id=action_id,done=done)
+                self.save(obs=obs,action_id=action_id)
                 path_point.append(self.sim.get_agent_state().position)
                 for action in action_id:
                     obs , reward , done , info = self.env.step(action=action)
@@ -231,6 +231,7 @@ class OfflineCollect:
                 self.store("greedy" , self.env._env.current_episode.scene_id , self.env._env.current_episode)
                 
             elif epsilon >= 0.4 and epsilon < 0.8:
+                continue
                 # hybird network 
                 self.save_data = copy.deepcopy(self.save_data_struct)
                 path_point = []
@@ -238,13 +239,13 @@ class OfflineCollect:
                 action_id = self.sim.compute_oracle_actions()
                 done = False
                 self.save(sound_id = self.env._env.current_episode.info['sound'])
-                self.save(obs=obs,action_id=action_id,done=done)
+                self.save(obs=obs,action_id=action_id)
                 path_point.append(self.sim.get_agent_state().position)
                 for index , action in enumerate(action_id):
                     if index > int(len(action_id) / 2):
                         visual = torch.from_numpy(obs['rgb']).float() / 255.0
                         audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                        logits = self.hybird_network(audio , visual)
+                        logits = self.hybird_network.encoder_forward(audio , visual)
                         action = torch.argmax(logits).item()
                         obs , reward , done , info = self.env.step(action=action)
                         self.save(obs=obs,reward=reward,done=done,info=info)
@@ -268,7 +269,7 @@ class OfflineCollect:
                 obs = self.env.reset()
                 done = False
                 self.save(sound_id = self.env._env.current_episode.info['sound'])
-                self.save(obs=obs,done=done)
+                self.save(obs=obs)
                 path_point.append(self.sim.get_agent_state().position)
                 step = 0
                 while step < 50:

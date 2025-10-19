@@ -10,13 +10,23 @@ if __name__ == "__main__":
         from col import COLLECTER
         from run import Collect
         env = Env(config=config)
-        collecter = COLLECTER(config , env)
+        collecter = COLLECTER(config , env , model = None)
         logger.info(f"collect {task_config.COLLECT.TYPE} beggining")
         Collect(collecter=collecter)
     
     elif task_config.LMDB.OPEN :
+        loadlmdb_config = task_config.LMDB
         from train import LoadLmdb
-        LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
+        if loadlmdb_config.TYPE == "HybirdNetwork":
+            LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
+        elif loadlmdb_config.TYPE == "offline":
+            from network import HybirdNetwork
+            import torch
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = HybirdNetwork().to(device)
+            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.eval()
+            LoadLmdb.load_offline(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
     
     elif task_config.TRAIN.OPEN:
         train_config = task_config.TRAIN

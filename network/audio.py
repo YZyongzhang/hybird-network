@@ -82,3 +82,9 @@ class AudioCRNN(nn.Module):
         x = x.squeeze(1)
         x = self.fnn(x)
         return x
+    def encoder_forward(self, audio):
+        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        audio = audio.permute(0, 3, 1, 2)
+        x = self.cnn(audio)
+        x = self.attn.forward(x, x, x)
+        return x

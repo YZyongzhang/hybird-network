@@ -35,18 +35,18 @@ TASK:
     
 COLLECT:
   OPEN: False
-  TYPE: "greedy"
+  TYPE: "offlineRL"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[]}
-  DATA_DIR: "dataset/pickle/v2/greedy(angle_val)" #"pickle/greedy"
+  DATA_DIR: "dataset/pickle/v2/greedy(offlineRL_train)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
 
 TRAIN:
   OPEN: False
   SAVE_LOADER: False
-  TYPE: "HybirdNetworkAudio"
-  EXPERIMENT_LOSS_DIR: "experiment/loss/audio"
-  EXPERIMENT_CKPT_DIR: "experiment/ckpt/audio"
+  TYPE: "HybirdNetwork"
+  EXPERIMENT_LOSS_DIR: "experiment/loss/hybirdnetwork"
+  EXPERIMENT_CKPT_DIR: "experiment/ckpt/hybirdnetwork"
   TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 1000
@@ -56,13 +56,15 @@ TRAIN:
 
 LMDB:
   OPEN: True
+  TYPE: "offline"
   RAW_DATA_PATH: "dataset/pickle/v2/greedy(angle_train)"
-  TO_PATH: "dataset/pt/v2/greedy(angle_train)"
+  TO_PATH: "dataset/pt/v2/greedy(offline_train)"
+  CKPT: "HybirdNetworkCkpt/hybirdnetwork/ckpt/hybirdnetwork/model_epoch_best.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_telephone"
+  SPLIT: "train_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"

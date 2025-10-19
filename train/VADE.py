@@ -170,7 +170,91 @@ class LoadLmdb:
                 'angles':torch.stack(buffer_angles)
             }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
-            
+    
+    @classmethod
+    def load_offline(cls, path, model, config):
+        """
+
+        每个样本包含：
+            - state: 当前状态编码特征
+            - next_state: 下一状态编码特征
+            - action: 动作 (long tensor)
+            - reward: 奖励 (float tensor)
+            - done: 终止标志 (bool tensor)
+        """
+
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 10000  # 每个shard包含的样本数
+        shard_id = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done'][1:]).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+
+            # 遍历每一对 (state, next_state)
+            for i in range(len(obs) - 1):
+                v_now = obs[i]
+                v_next = obs[i + 1]
+                a = action_id[i]
+                r = rewards[i]
+                d = dones[i]
+
+                # 提取特征
+                visual_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
+                visual_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
+
+                # 编码成状态向量
+                state = model.embedding_forward(audio_now.to(model.device), visual_now.to(model.device))
+                next_state = model.embedding_forward(audio_next.to(model.device), visual_next.to(model.device))
+
+                buffer_states.append(state)
+                buffer_next_states.append(next_state)
+                buffer_actions.append(torch.tensor(a, dtype=torch.long))
+                buffer_rewards.append(torch.tensor(r, dtype=torch.float))
+                buffer_dones.append(torch.tensor(d, dtype=torch.bool))
+
+                # 存 shard
+                if len(buffer_states) >= shard_size:
+                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
+                    torch.save({
+                        'state': torch.stack(buffer_states),
+                        'next_state': torch.stack(buffer_next_states),
+                        'action': torch.stack(buffer_actions),
+                        'reward': torch.stack(buffer_rewards),
+                        'done': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"✅ 保存 shard {shard_id}, size={len(buffer_states)}")
+
+                    # 清空缓存
+                    buffer_states, buffer_next_states = [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], [], []
+                    shard_id += 1
+
+        # 保存最后一个不满的 shard
+        if buffer_states:
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
+            torch.save({
+                'state': torch.stack(buffer_states),
+                'next_state': torch.stack(buffer_next_states),
+                'action': torch.stack(buffer_actions),
+                'reward': torch.stack(buffer_rewards),
+                'done': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"✅ 保存 shard {shard_id}, size={len(buffer_states)}")   
     @classmethod
     def get_values_tuple(cls, data):
         import pdb;pdb.set_trace()
