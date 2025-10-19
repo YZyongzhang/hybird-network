@@ -241,7 +241,7 @@ class LoadLmdb:
 
                     # 清空缓存
                     buffer_states, buffer_next_states = [], []
-                    buffer_actions, buffer_rewards, buffer_dones = [], [], [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
                     shard_id += 1
 
         # 保存最后一个不满的 shard
