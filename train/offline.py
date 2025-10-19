@@ -37,11 +37,11 @@ class OfflineTrain:
 
             if epoch % 100 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/Foundation_model_{epoch}.pth')
-            if epoch % 10 == 0:
+            if epoch % 1 == 0:
                 train_acc = self.val(epoch)
-                online_reward = self.online_test.rollout(self.agent.actor ,logger )
+                # online_reward = self.online_test.rollout(self.agent.actor ,logger )
                 self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
-                self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
+                # self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
                 
 
     def val(self, epoch):

@@ -56,7 +56,7 @@ TRAIN:
   OFFLINE: 
     TYPE: "OfflineRL"
     SAVE_LOADER: False
-    EXPERIMENT_LOSS_DIR: "experiment/loss/offline"
+    EXPERIMENT_LOSS_DIR: "experiment/loss/offline/7"
     EXPERIMENT_CKPT_DIR: "experiment/ckpt/offline"
     train_shard_pattern: "dataset/pt/v2/greedy(offline_train)/offline_rl_shard_0.pt"
     ONLINE_CKPT: "HybirdNetworkCkpt/hybirdnetwork/ckpt/hybirdnetwork/model_epoch_best.pth"
