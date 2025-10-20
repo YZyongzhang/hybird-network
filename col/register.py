@@ -231,7 +231,6 @@ class OfflineCollect:
                 self.store("greedy" , self.env._env.current_episode.scene_id , self.env._env.current_episode)
                 
             elif epsilon >= 0.4 and epsilon < 0.8:
-                continue
                 # hybird network 
                 self.save_data = copy.deepcopy(self.save_data_struct)
                 path_point = []
@@ -245,13 +244,14 @@ class OfflineCollect:
                     if index > int(len(action_id) / 2):
                         visual = torch.from_numpy(obs['rgb']).float() / 255.0
                         audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                        logits = self.hybird_network.encoder_forward(audio , visual)
+                        logits = self.hybird_network(audio.to('cuda') , visual.to('cuda'))
                         action = torch.argmax(logits).item()
                         obs , reward , done , info = self.env.step(action=action)
                         self.save(obs=obs,reward=reward,done=done,info=info)
                         path_point.append(self.sim.get_agent_state().position)
-                        if action == action_id[-1]:
+                        if done:
                             print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+                            break
                     else:
                         obs , reward , done , info = self.env.step(action=action)
                         self.save(obs=obs,reward=reward,done=done,info=info)
@@ -278,9 +278,9 @@ class OfflineCollect:
                     obs , reward , done , info = self.env.step(action=action)
                     self.save(obs=obs,reward=reward,done=done,info=info)
                     path_point.append(self.sim.get_agent_state().position)
-                    if action == action_id[-1]:
-                        print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
-                
+                    if done:
+                        break
+                    
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)
                 self.store("random" , self.env._env.current_episode.scene_id , self.env._env.current_episode)

@@ -108,6 +108,11 @@ class Network(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
 
     def forward(self,audio , visual):
+        if len(audio.shape) == 3:
+            audio = audio.unsqueeze(0)
+        if len(visual.shape) == 3:
+            visual = visual.unsqueeze(0)
+            
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         visual = visual.permute(0,3, 1, 2)
         

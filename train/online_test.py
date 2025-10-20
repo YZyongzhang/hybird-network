@@ -32,7 +32,7 @@ class OnlineTest:
                 step +=1
                 epsiode_reward +=reward
                 if done or step >= 100:
-                    logger.info(f"episode is done , info is {info} \nsumreward is {epsiode_reward}")
+                    logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
                     break
             total_reward +=  epsiode_reward
         return total_reward/self.env._env.number_of_episodes

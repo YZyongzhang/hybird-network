@@ -25,7 +25,10 @@ class LoadLmdb:
     def get_files(cls , path):
         import os
         # 获取到object的路径
-        object_name_files = [os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"]
+        object_name_files = []
+        parents = [os.path.join(path , i) for i in os.listdir(path = path)]
+        for path in parents:
+            object_name_files.extend([os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"])
         files = []
         for scene in object_name_files:
             files.extend([os.path.join(scene , i) for i in os.listdir(scene)])
@@ -201,7 +204,7 @@ class LoadLmdb:
             obs = data['obs']
             action_id = np.array(data['action_id']).reshape(-1).tolist()
             rewards = np.array(data['reward']).reshape(-1).tolist()
-            dones = np.array(data['done'][1:]).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+            dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
 
             # 遍历每一对 (state, next_state)
             for i in range(len(obs) - 1):

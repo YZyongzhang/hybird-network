@@ -4,3 +4,4 @@ dataset/
 *.pkl
 HybridNetworkStoreOldExperiment/
 HybirdNetworkCkpt/
+*.txt

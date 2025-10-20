@@ -9,8 +9,14 @@ if __name__ == "__main__":
     if task_config.COLLECT.OPEN :
         from col import COLLECTER
         from run import Collect
+        import torch
+        from network import HybirdNetwork
         env = Env(config=config)
-        collecter = COLLECTER(config , env , model = None)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = HybirdNetwork().to(device)
+        model.load_state_dict(torch.load(task_config.COLLECT.COLLECT_CKPT))
+        model.eval()
+        collecter = COLLECTER(config , env , model = model)
         logger.info(f"collect {task_config.COLLECT.TYPE} beggining")
         Collect(collecter=collecter)
     
