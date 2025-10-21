@@ -104,7 +104,7 @@ class Train:
                 self.writer.add_scalar("Loss/epoch_angle", avg_angle_loss, ep)
             print(f"Epoch {ep+1} finished, average angle loss: {avg_angle_loss:.4f}")
             if (ep + 1) % 5 == 0:
-                save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
+                save_path = f"{self.save_dir}/model_epoch_{global_step}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
                 tqdm.write(f"Saved model checkpoint to {save_path}")
 

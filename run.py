@@ -86,6 +86,9 @@ if __name__ == "__main__":
                 beta=1,
                 device=device
             )
+            if offline_config.LOAD_PATH:
+                sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH))
+                sac_model.train()
             Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             
             

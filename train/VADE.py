@@ -26,10 +26,11 @@ class LoadLmdb:
         import os
         # 获取到object的路径
         object_name_files = []
-        parents = [os.path.join(path , i) for i in os.listdir(path = path)]
-        for path in parents:
-            object_name_files.extend([os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"])
+        # parents = [os.path.join(path , i) for i in os.listdir(path = path)]
+        # for path in parents:
+        object_name_files.extend([os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"])
         files = []
+        
         for scene in object_name_files:
             files.extend([os.path.join(scene , i) for i in os.listdir(scene)])
         return files
@@ -205,7 +206,10 @@ class LoadLmdb:
             action_id = np.array(data['action_id']).reshape(-1).tolist()
             rewards = np.array(data['reward']).reshape(-1).tolist()
             dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
-
+    
+            if data['info'][0]['distance_to_goal'] > 5 :
+                tqdm.write(f"{data['info'][0]['distance_to_goal']} drop")
+                continue
             # 遍历每一对 (state, next_state)
             for i in range(len(obs) - 1):
                 v_now = obs[i]

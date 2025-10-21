@@ -84,7 +84,7 @@ class SAC_model(torch.nn.Module):
                                dim=1,
                                keepdim=True)
         next_value = min_qvalue + self.log_alpha.exp() * entropy
-        td_target = rewards + self.gamma * next_value * (1 - dones)
+        td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
     def soft_update(self, net, target_net):
@@ -109,13 +109,14 @@ class SAC_model(torch.nn.Module):
 
 
         critic_1_q_values = self.critic_1(states)
-        critic_1_q_values_ = critic_1_q_values.gather(1, actions)
-
+        critic_1_q_values_ = critic_1_q_values.gather(1, actions).squeeze(1)
+        
+        
         critic_1_loss = torch.mean(
             F.mse_loss(critic_1_q_values_, td_target.detach()))
 
         critic_2_q_values = self.critic_2(states)
-        critic_2_q_values_ = critic_2_q_values.gather(1, actions)
+        critic_2_q_values_ = critic_2_q_values.gather(1, actions).squeeze(1)
         critic_2_loss = torch.mean(
             F.mse_loss(critic_2_q_values_, td_target.detach()))
 

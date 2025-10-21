@@ -46,20 +46,22 @@ TRAIN:
   OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL"
-  EXPERIMENT_LOSS_DIR: "experiment/loss/hybirdnetwork"
-  EXPERIMENT_CKPT_DIR: "experiment/ckpt/hybirdnetwork"
+  EXPERIMENT_LOSS_DIR: "experiment/loss/hybirdnetworkShortDistence5"
+  EXPERIMENT_CKPT_DIR: "experiment/ckpt/hybirdnetworkShortDistence5"
   TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 1000
   BATCH_SIZE: 128
-  train_shard_pattern: "dataset/pt/v2/greedy(angle_train)/foundation_model_shard_*.pt"
-  val_shard_pattern: "dataset/pt/v2/greedy(angle_val)/foundation_model_shard_*.pt"
+  train_shard_pattern: "dataset/pt/v2/greedy(angle_train_short_distence)/foundation_model_shard_*.pt"
+  val_shard_pattern: "dataset/pt/v2/greedy(angle_val_short_distence)/foundation_model_shard_*.pt"
   OFFLINE: 
     TYPE: "OfflineRL"
     SAVE_LOADER: False
-    EXPERIMENT_LOSS_DIR: "experiment/loss/offline/17"
+    LOAD_PATH: False
+    MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
+    EXPERIMENT_LOSS_DIR: "experiment/loss/offline/28"
     EXPERIMENT_CKPT_DIR: "experiment/ckpt/offline"
-    train_shard_pattern: "dataset/pt/v2/greedy(offline)/offline_rl_shard_*.pt"
+    train_shard_pattern: "dataset/pt/v2/greedy(offline_train_greedy_distence5_greedy)/offline_rl_shard_*.pt"
     ONLINE_CKPT: "HybirdNetworkCkpt/hybirdnetwork/ckpt/hybirdnetwork/model_epoch_best.pth"
     state_dim: 256
     action_dim: 4
@@ -69,14 +71,14 @@ TRAIN:
     tau: 0.005
     gamma: 0.99
     batch_size: 64
-    num_epochs : 10000
+    num_epochs : 30
 
 LMDB:
   OPEN: False
   TYPE: "offline"
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(offlineRL_train)"
-  TO_PATH: "dataset/pt/v2/greedy(offline_train)"
-  CKPT: "HybirdNetworkCkpt/hybirdnetwork/ckpt/hybirdnetwork/model_epoch_best.pth"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(offlineRL_train)/hybird"
+  TO_PATH: "dataset/pt/v2/greedy(offline_train_greedy_distence5_hybird)"
+  CKPT: "HybirdNetworkCkpt/hybirdnetworkShortDistence5/model_epoch_best.pth"
 
 
 DATASET:
@@ -85,4 +87,4 @@ DATASET:
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_short_distence.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
