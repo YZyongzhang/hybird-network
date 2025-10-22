@@ -15,7 +15,10 @@ class COLLECTER:
         if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle' , 'offlineRL']:
             cls = CollectRegister.get(self.collect_config.TYPE)
             
-            self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
+            if self.collect_config.TYPE is 'offlineRL':
+                self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
+            else:
+                self.collecter = cls(self.env , self.collect_config)
         else:
             raise ValueError(f"collect name error!")
     def collect(self):

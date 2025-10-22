@@ -17,7 +17,7 @@ class OnlineTest:
         for _ in tqdm(range(self.env._env.number_of_episodes),desc="onlinetest"):
             scene = self.env._env.current_episode.scene_id[-15:-4] 
             episode_id = self.env._env.current_episode.episode_id
-            path = f"{scene}_{episode_id}"
+            path = f"img/{scene}_{episode_id}"
             os.makedirs(path , exist_ok=True)
             
             logger.info(f"scene is {scene}  , episodeid is {episode_id}")

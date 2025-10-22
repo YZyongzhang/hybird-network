@@ -3,6 +3,7 @@ ENVIRONMENT:
 SIMULATOR:
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
+  SENSORS: ["DEPTH_SENSOR"]
   RGB_SENSOR:
     WIDTH: 128
     HEIGHT: 128
@@ -34,16 +35,16 @@ TASK:
     DRAW_SHORTEST_PATH: True
     
 COLLECT:
-  OPEN: False
-  TYPE: "offlineRL"
+  OPEN: True
+  TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[]}
-  DATA_DIR: "dataset/pickle/v2/greedy(offlineRL_train)" #"pickle/greedy"
+  DATA_DIR: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "HybirdNetworkCkpt/hybirdnetwork/ckpt/hybirdnetwork/model_epoch_best.pth"
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   SAVE_LOADER: False
   TYPE: "OfflineRL"
   EXPERIMENT_LOSS_DIR: "experiment/loss/hybirdnetworkShortDistence5"

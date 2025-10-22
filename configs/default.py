@@ -100,6 +100,8 @@ _TC.defrost()
 _TC.TASK.AUDIOGOAL_SENSOR = CN()
 _TC.TASK.AUDIOGOAL_SENSOR.TYPE = "AudioGoalSensor"
 # -----------------------------------------------------------------------------
+_TC.TASK.EMANTICOBJECT_SENSOR = CN()
+_TC.TASK.EMANTICOBJECT_SENSOR.TYPE = "SemanticObjectSensor"
 # SPECTROGRAM_SENSOR
 # -----------------------------------------------------------------------------
 _TC.TASK.SPECTROGRAM_SENSOR = CN()
