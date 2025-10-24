@@ -31,16 +31,23 @@ class Train:
         for ep in range(self.epoch):
             local_step = 0
             epoch_angle_loss = 0.0
-            
+            pre_rgb = 0
+            pre_depth = 0
             for batch in self.train_loader:
 
-                batch_audio , batch_visual , batch_angle , batch_action = batch
-                batch_audio  , batch_visual ,batch_action = batch_audio.to(self.device) , batch_visual.to(self.device) , batch_action.to(self.device)
+                batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
+
+                batch_audio  , batch_rgb ,batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
+                
+                if pre_rgb == 0 and pre_depth == 0:
+                    pre_rgb = batch_rgb
+                    pre_depth = batch_depth
+                    continue
 
-
-                action_predict = self.train_model(batch_audio , batch_visual)
-
+                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
+                pre_rgb = batch_rgb
+                pre_depth = batch_depth
                 loss_action = F.cross_entropy(action_predict , batch_action)
                 self.optimizer.zero_grad()
                 loss_action.backward()
@@ -58,16 +65,16 @@ class Train:
                 global_step += 1
                 local_step += 1
 
-                if global_step % 500 == 0:
-                    self.validate(global_step)
-            # self.validate(ep)
+                # if global_step % 500 == 0:
+                #     self.validate(global_step)
+            self.validate(ep)
 
 
             avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
                 self.writer.add_scalar("Loss/epoch_action", avg_angle_loss, ep)
             print(f"Epoch {ep+1} finished, average action loss: {avg_angle_loss:.4f}")
-            if (ep + 1) % 5 == 0:
+            if (ep + 1) % 1 == 0:
                 save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
                 tqdm.write(f"Saved model checkpoint to {save_path}")
@@ -79,13 +86,21 @@ class Train:
         total_acc = 0.0
         correct = 0
         with torch.no_grad():
+            pre_rgb = 0
+            pre_depth = 0
             for batch in self.val_loader:
-                batch_audio , batch_visual , batch_angle , batch_action = batch
-                batch_audio  , batch_visual , batch_action = batch_audio.to(self.device) , batch_visual.to(self.device) , batch_action.to(self.device)
+                batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action = batch
+                batch_audio  , batch_rgb , batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
-
-                action_predict = self.train_model(batch_audio , batch_visual)
-
+                if pre_rgb == 0 and pre_depth == 0:
+                    pre_rgb = batch_rgb
+                    pre_depth = batch_depth
+                    continue
+                
+                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
+                pre_rgb = batch_rgb
+                pre_depth = batch_depth
+                
                 action_loss = F.cross_entropy(action_predict , batch_action)
                 
                 val_action_loss += action_loss.item()

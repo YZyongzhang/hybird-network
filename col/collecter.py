@@ -15,7 +15,7 @@ class COLLECTER:
         if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle' , 'offlineRL']:
             cls = CollectRegister.get(self.collect_config.TYPE)
             
-            if self.collect_config.TYPE is 'offlineRL':
+            if self.collect_config.TYPE in ['offlineRL' , 'collided']:
                 self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
             else:
                 self.collecter = cls(self.env , self.collect_config)

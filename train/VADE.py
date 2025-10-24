@@ -127,7 +127,7 @@ class LoadLmdb:
         shard_size = 10000  # 每个 shard 1w 样本
         shard_id = 0
 
-        buffer_visuals, buffer_audios, buffer_actions , buffer_angles = [], [], [] , []
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
 
         for file in tqdm(files):
             with open(file, 'rb') as f:
@@ -138,42 +138,46 @@ class LoadLmdb:
 
             action_id = data['action_id']
             action_id = np.array(action_id).reshape(-1).tolist()
-            for v, a  , info in zip(obs[1:-1], action_id[1:] , data['info']):
+            for v, a  , info in zip(obs[:-1], action_id , data['info']):
                 # if info['distance_to_goal'] > 8.0:
                 #     tqdm.write(f"distence is {info['distance_to_goal']} , drop")
                 #     continue
-                visual = torch.from_numpy(v['rgb']).float() / 255.0
+                rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                depth = torch.from_numpy(v['depth']).float()                
                 audio = torch.from_numpy(v['spectrogram'][0]).float()
                 
                 action = torch.tensor(a, dtype=torch.long)
                 angel = np.degrees(v['angle'][1])
-                buffer_visuals.append(visual)
+                buffer_rgb.append(rgb)
+                buffer_depth.append(depth)
                 buffer_audios.append(audio)
                 buffer_actions.append(action)
                 buffer_angles.append(torch.tensor(angel))
                 # 写一个 shard
-                if len(buffer_visuals) >= shard_size:
+                if len(buffer_rgb) >= shard_size:
                     torch.save({
-                        'visuals': torch.stack(buffer_visuals),
+                        'rgb': torch.stack(buffer_rgb),
+                        'depth':torch.stack(buffer_depth),
                         'audios': torch.stack(buffer_audios),
                         'actions': torch.stack(buffer_actions),
                         'angles':torch.stack(buffer_angles)
                     }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
 
-                    print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
+                    print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
 
-                    buffer_visuals, buffer_audios, buffer_actions , buffer_angles = [], [], [] , []
+                    buffer_rgb, buffer_depth , buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
                     shard_id += 1
 
         # 保存最后一个不满 shard 的数据
-        if buffer_visuals:
+        if buffer_rgb:
             torch.save({
-                'visuals': torch.stack(buffer_visuals),
+                'rgb': torch.stack(buffer_rgb),
+                'depth':torch.stack(buffer_depth),
                 'audios': torch.stack(buffer_audios),
                 'actions': torch.stack(buffer_actions),
                 'angles':torch.stack(buffer_angles)
             }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
-            print(f"保存 shard {shard_id}, size={len(buffer_visuals)}")
+            print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
     
     @classmethod
     def load_offline(cls, path, model, config):
@@ -207,9 +211,9 @@ class LoadLmdb:
             rewards = np.array(data['reward']).reshape(-1).tolist()
             dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
     
-            if data['info'][0]['distance_to_goal'] > 5 :
-                tqdm.write(f"{data['info'][0]['distance_to_goal']} drop")
-                continue
+            # if data['info'][0]['distance_to_goal'] > 5 :
+            #     tqdm.write(f"{data['info'][0]['distance_to_goal']} drop")
+            #     continue
             # 遍历每一对 (state, next_state)
             for i in range(len(obs) - 1):
                 v_now = obs[i]
@@ -219,15 +223,17 @@ class LoadLmdb:
                 d = dones[i]
 
                 # 提取特征
-                visual_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                depth_now = torch.from_numpy(v_now['depth']).float() 
                 audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
-                visual_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                rgb_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                depth_next = torch.from_numpy(v_next['depth']).float()
                 audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
 
                 # 编码成状态向量
                 with torch.no_grad():
-                    state = model.embedding_forward(audio_now.to(model.device), visual_now.to(model.device))
-                    next_state = model.embedding_forward(audio_next.to(model.device), visual_next.to(model.device))
+                    state = model.embedding_forward(audio_now.to(model.device), rgb_now.to(model.device) , depth_now.to(model.device))
+                    next_state = model.embedding_forward(audio_next.to(model.device), rgb_next.to(model.device) , depth_next.to(model.device))
 
                 buffer_states.append(state)
                 buffer_next_states.append(next_state)
@@ -457,12 +463,13 @@ class ShardedPTDataset(Dataset):
         else:
             data = self.shards[shard_id]
 
-        visual = data["visuals"][local_idx]
+        rgb = data["rgb"][local_idx]
+        depth = data['depth'][local_idx]
         audio = data["audios"][local_idx]
         action = data["actions"][local_idx]
         angle = data['angles'][local_idx]
         std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        return  std_audio, visual , angle , action
+        return  std_audio, rgb , depth , angle , action
       
 class ShardedPTDatasetOffline(Dataset):
     def __init__(self, shard_pattern="./dataset/pt/offline/offline_model_shard_*.pt", preload=True):

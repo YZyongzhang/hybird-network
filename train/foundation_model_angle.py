@@ -66,7 +66,7 @@ class Train:
             
             for batch in self.train_loader:
 
-                batch_audio , batch_visual , batch_angle , batch_action = batch
+                batch_audio , batch_rgb , batch_depth , batch_angle , batch_action = batch
                 batch_audio  = batch_audio.to(self.device)
                 batch_angle = batch_angle.float().to(self.device)
 
@@ -93,18 +93,18 @@ class Train:
                 global_step += 1
                 local_step += 1
 
-                if global_step % 500 == 0:
-                    self.validate(global_step)
+                # if global_step % 500 == 0:
+                #     self.validate(global_step)
                 
-            # self.validate(ep)
+            self.validate(ep)
 
 
             avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
                 self.writer.add_scalar("Loss/epoch_angle", avg_angle_loss, ep)
             print(f"Epoch {ep+1} finished, average angle loss: {avg_angle_loss:.4f}")
-            if (ep + 1) % 5 == 0:
-                save_path = f"{self.save_dir}/model_epoch_{global_step}.pth"
+            if (ep + 1) % 1 == 0:
+                save_path = f"{self.save_dir}/model_epoch_{ep}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
                 tqdm.write(f"Saved model checkpoint to {save_path}")
 
@@ -115,7 +115,7 @@ class Train:
         correct = 0
         with torch.no_grad():
             for batch in self.val_loader:
-                batch_audio , batch_visual , batch_angle , batch_action = batch
+                batch_audio , batch_rgb , batch_depth , batch_angle , batch_action = batch
                 batch_audio  = batch_audio.to(self.device)
                 batch_angle = batch_angle.float().to(self.device)
 

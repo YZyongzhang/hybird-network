@@ -96,7 +96,7 @@ class Network(nn.Module):
         self.add_position = PositionalEcoder()
         self.visual_transformer_encoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
         self.audio_encoder = AudioCRNN()
-        path = './HybirdNetworkCkpt/hybirdnetworkAudioShortDistence5/model_epoch_best.pth'
+        path = './HybirdNetworkCkpt/RGBD/audio/model_epoch_best.pth'
         self.audio_encoder.load_state_dict(torch.load(path) ,  strict=True)
         self.audio_encoder.eval()
         for param in self.audio_encoder.parameters():
@@ -107,18 +107,30 @@ class Network(nn.Module):
         self.final = Finnal_model(input_dim = 512 , hidden_dim= 256 , output_dim=4)
         self.device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
 
-    def forward(self,audio , visual):
+    def forward(self,audio , rgb , depth , pre_rgb , pre_depth):
         if len(audio.shape) == 3:
             audio = audio.unsqueeze(0)
-        if len(visual.shape) == 3:
-            visual = visual.unsqueeze(0)
-            
+        if len(rgb.shape) == 3:
+            rgb = rgb.unsqueeze(0)
+        if len(depth.shape) == 3:
+            depth = depth.unsqueeze(0)
+        if len(pre_rgb.shape) == 3:
+            rgb = rgb.unsqueeze(0)
+        if len(pre_depth.shape) == 3:
+            depth = depth.unsqueeze(0)
+        rgb = rgb.permute(0,3, 1, 2)
+        depth = depth.permute(0,3, 1, 2)
+        pre_rgb = rgb.permute(0,3, 1, 2)
+        pre_depth = depth.permute(0,3, 1, 2)
+        rgbd = torch.cat([rgb, depth], dim=1)
+        pre_rgbd = torch.cat([rgb, depth], dim=1)
+        total = torch.cat([rgbd , pre_rgbd] , dim=1)
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        visual = visual.permute(0,3, 1, 2)
+        
         
         with torch.no_grad():
             audio_encoder = self.audio_encoder.encoder_forward(audio)
-        visual_cnn = self.visual_encoder(visual)
+        visual_cnn = self.visual_encoder(rgbd)
         v_batch , v_dim , v_h , v_w = visual_cnn.shape
         visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
         v_position = self.add_position(visual_cnn)
@@ -133,17 +145,24 @@ class Network(nn.Module):
         return finnal_output
         # return attentioned
     
-    def embedding_forward(self, audio , visual):
+    def embedding_forward(self, audio , rgb , depth):
         if len(audio.shape) == 3:
             audio = audio.unsqueeze(0)
-        if len(visual.shape) == 3:
-            visual = visual.unsqueeze(0)
-        
+        if len(rgb.shape) == 3:
+            rgb = rgb.unsqueeze(0)
+        if len(depth.shape) == 3:
+            depth = depth.unsqueeze(0)
+            
+        rgb = rgb.permute(0,3, 1, 2)
+        depth = depth.permute(0,3, 1, 2)
+            
+        rgbd = torch.cat([rgb, depth], dim=1)
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        visual = visual.permute(0,3, 1, 2)
         
-        audio_encoder = self.audio_encoder.encoder_forward(audio)
-        visual_cnn = self.visual_encoder(visual)
+        
+        with torch.no_grad():
+            audio_encoder = self.audio_encoder.encoder_forward(audio)
+        visual_cnn = self.visual_encoder(rgbd)
         v_batch , v_dim , v_h , v_w = visual_cnn.shape
         visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
         v_position = self.add_position(visual_cnn)

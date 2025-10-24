@@ -37,7 +37,7 @@ class OfflineTrain:
 
             if epoch % 10 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % 30 == 0:
+            if epoch % 10 == 0:
                 # train_acc = self.val(epoch)
                 self.agent.eval()
                 online_reward  , spl = self.online_test.rollout(self.agent.actor ,logger )

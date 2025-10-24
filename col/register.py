@@ -102,43 +102,51 @@ class GreedyCollect:
 
 @CollectRegister.register("collided")
 class CollidedCollect:
-    def __init__(self , env:AudioNavRLEnv , config:Config):
+    def __init__(self , env:AudioNavRLEnv , config:Config , **kwargs):
         self.env = env
         self.sim: SoundSpacesSim = env._env._sim
         self.save_data_struct = config.DATA_STRUCT
         self.save_data_dir = config.DATA_DIR
         self.save_path_img = config.IMG_DIR
         self.save_path_type = config.IMG_TYPE
+        self.hybird_network = kwargs['model']
     def collect(self):
         for _ in range(self.env._env.number_of_episodes):
+            
             self.save_data = copy.deepcopy(self.save_data_struct)
             greedy_path_point = []
             collided_path_point = []
             obs = self.env.reset()
-            
+            pre_obs = obs
+            rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+            depth = torch.from_numpy(obs['depth']).float()
+            audio = torch.from_numpy(obs['spectrogram'][0]).float()
+            action = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+            action = torch.argmax(action).item()
             done = False
-            self.save(obs=obs)
-            self.save(sound_id = self.env._env.current_episode.sound_id)
             greedy_path_point.append(self.sim.get_agent_state().position)
-            while len(self.save_data['done']) < 50 and not done:
-                action = random.choice([1,2,3])
-                _ , _ , done , _ = self.env.step(action = action)
-                greedy_path_point.append(self.sim.get_agent_state().position)
+            while not done:
+                obs , rewad , done , info = self.env.step(action = action)
+                pre_obs = obs
+                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                depth = torch.from_numpy(obs['depth']).float()
+                audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                action = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+                action = torch.argmax(action).item()
                 collided = self.sim.previous_step_collided
                 if collided:
                     greedy_action = self.sim.compute_oracle_actions()
-                    for action in greedy_action[:5]:
+                    self.save(obs = obs)
+                    for action in greedy_action[:3]:
                         obs , reward , done , info = self.env.step(action = action)
                         collided_path_point.append(self.sim.get_agent_state().position)
-                        self.save(obs=obs,reward=reward,done=done,info=info,action_id=action)
+                        self.save(obs = obs , reward=reward,done=done,info=info,action_id=action)
+                        
                         if done:
                             break
+                    self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                    break
             
-            self.save(greedy_map=draw_map(self.env , greedy_path_point))
-            self.save(collided_map=draw_map(self.env , collided_path_point))
-            self.save(greedy_path_point=greedy_path_point)
-            self.save(collided_path_point=collided_path_point)
-            self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
             
     def save(self , **kwargs):
         for key , value in kwargs.items():
