@@ -130,6 +130,7 @@ class LoadLmdb:
         buffer_rgb, buffer_depth, buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
 
         for file in tqdm(files):
+            tqdm.write(file)
             with open(file, 'rb') as f:
                 data = pickle.load(f)
          
@@ -425,7 +426,9 @@ class VADE_Offline(Dataset):
 class ShardedPTDataset(Dataset):
     def __init__(self, shard_pattern, preload=True):
         super().__init__()
-        self.shard_files = sorted(glob.glob(shard_pattern))
+        self.shard_files = []
+        for pattern in shard_pattern:
+            self.shard_files.extend(sorted(glob.glob(pattern))[:7])
         assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
         self.preload = preload
         self.shards = []   # 存 torch.load 的结果（如果 preload=True）

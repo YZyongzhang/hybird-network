@@ -241,30 +241,43 @@ class OfflineCollect:
             elif epsilon >= 0.4 and epsilon < 0.8:
                 # hybird network 
                 self.save_data = copy.deepcopy(self.save_data_struct)
+                step = 0
                 path_point = []
                 obs = self.env.reset()
-                action_id = self.sim.compute_oracle_actions()
                 done = False
+                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                depth = torch.from_numpy(obs['depth']).float()
+                audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+                action = torch.argmax(logits).item()
+                self.save(action_id = action)
                 self.save(sound_id = self.env._env.current_episode.info['sound'])
-                self.save(obs=obs,action_id=action_id)
+                self.save(obs=obs)
                 path_point.append(self.sim.get_agent_state().position)
-                for index , action in enumerate(action_id):
-                    if index > int(len(action_id) / 2):
-                        visual = torch.from_numpy(obs['rgb']).float() / 255.0
-                        audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                        logits = self.hybird_network(audio.to('cuda') , visual.to('cuda'))
-                        action = torch.argmax(logits).item()
+                while not done:
+                
+                    obs , reward , done , info = self.env.step(action=action)
+                    step +=1
+                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                    depth = torch.from_numpy(obs['depth']).float()
+                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                    logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+                    action = torch.argmax(logits).item()
+                    self.save(action_id = action)
+                    self.save(obs=obs,reward=reward,done=done,info=info)
+                    path_point.append(self.sim.get_agent_state().position)
+                    if done or step > 20:
+                        print(f"action is {action} , done is {done} , info is {info}")
+                        break
+                if not done:
+                    action_id = self.sim.compute_oracle_actions()
+                    for action in action_id:
                         obs , reward , done , info = self.env.step(action=action)
+                        self.save(action_id = action)
+                        
                         self.save(obs=obs,reward=reward,done=done,info=info)
                         path_point.append(self.sim.get_agent_state().position)
                         if done:
-                            print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
-                            break
-                    else:
-                        obs , reward , done , info = self.env.step(action=action)
-                        self.save(obs=obs,reward=reward,done=done,info=info)
-                        path_point.append(self.sim.get_agent_state().position)
-                        if action == action_id[-1]:
                             print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
                 
                 self.save(map=draw_map(self.env , path_point))

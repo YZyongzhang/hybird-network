@@ -31,8 +31,7 @@ class Train:
         for ep in range(self.epoch):
             local_step = 0
             epoch_angle_loss = 0.0
-            pre_rgb = 0
-            pre_depth = 0
+            frist = True
             for batch in self.train_loader:
 
                 batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
@@ -40,10 +39,10 @@ class Train:
                 batch_audio  , batch_rgb ,batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
                 
-                if pre_rgb == 0 and pre_depth == 0:
-                    pre_rgb = batch_rgb
-                    pre_depth = batch_depth
-                    continue
+                if frist:
+                    pre_rgb = torch.zeros_like(batch_rgb)
+                    pre_depth = torch.zeros_like(batch_depth)
+                    frist = False
 
                 action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
                 pre_rgb = batch_rgb
@@ -81,21 +80,19 @@ class Train:
 
     def validate(self, step):
         self.train_model.eval()
-        total = 0
         val_action_loss = 0.0
         total_acc = 0.0
         correct = 0
         with torch.no_grad():
-            pre_rgb = 0
-            pre_depth = 0
+            frist = True
             for batch in self.val_loader:
                 batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action = batch
                 batch_audio  , batch_rgb , batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
-                if pre_rgb == 0 and pre_depth == 0:
-                    pre_rgb = batch_rgb
-                    pre_depth = batch_depth
-                    continue
+                if frist:
+                    pre_rgb = torch.zeros_like(batch_rgb)
+                    pre_depth = torch.zeros_like(batch_depth)
+                    frist = False
                 
                 action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
                 pre_rgb = batch_rgb
@@ -111,7 +108,6 @@ class Train:
 
         avg_action_loss = val_action_loss / len(self.val_loader)
         total_acc = correct / self.val_size
-
         if self.writer:
             self.writer.add_scalar("Val/action_loss", avg_action_loss, step)
             self.writer.add_scalar("Val/acc", total_acc, step)
