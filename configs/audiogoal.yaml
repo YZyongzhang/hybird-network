@@ -35,10 +35,10 @@ TASK:
     DRAW_SHORTEST_PATH: True
     
 COLLECT:
-  OPEN: True
-  TYPE: "collided"
+  OPEN: False
+  TYPE: "offlineRL"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[]}
-  DATA_DIR: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val_collided)" #"pickle/greedy"
+  DATA_DIR: "dataset/pickle/v2/greedy(offline_with_RGBD_resacle_reward)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
@@ -46,24 +46,24 @@ COLLECT:
 TRAIN:
   OPEN: False
   SAVE_LOADER: False
-  TYPE: "HybirdNetwork"
-  EXPERIMENT_LOSS_DIR: "experiment/loss/hybirdnetworkRGBDCollided100k_two_1_lr"
-  EXPERIMENT_CKPT_DIR: "experiment/ckpt/hybirdnetworkRGBDCollided100k_two_1_lr"
+  TYPE: "HybirdNetwork" # HybirdNetwork OfflineRL
+  EXPERIMENT_LOSS_DIR: "compare/loss/hybirdnetwork_RGBD_two_frame"
+  EXPERIMENT_CKPT_DIR: "compare/ckpt/hybirdnetwork_RGBD_two_frame"
   # TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   # VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 100
   BATCH_SIZE: 128
-  train_shard_pattern: ["dataset/pt/v2/greedy(RGBD_train)/foundation_model_shard_*.pt" , "dataset/pt/v2/greedy(RGBD_collided)/foundation_model_shard_*.pt"]
-  val_shard_pattern: ["dataset/pt/v2/greedy(hybirdnetwork_with_RGBD_val)/foundation_model_shard_*.pt"]
+  train_shard_pattern: ["dataset/hybird/pt/v2/greedy(RGBD_train)/foundation_model_shard_*.pt" , "dataset/hybird/pt/v2/greedy(RGBD_collided)/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["dataset/hybird/pt/v2/greedy(RGBD_val)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "experiment/loss/offline/RGBDCollided"
-    EXPERIMENT_CKPT_DIR: "experiment/ckpt/offline/RGBDCollided"
-    train_shard_pattern: "dataset/pt/v2/greedy(offline_with_RGBD)/offline_rl_shard_*.pt"
-    ONLINE_CKPT: 'experiment/ckpt/hybirdnetworkRGBDCollided100k_two_1_lr/model_epoch_68.pth'
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/offlineRGBD"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/offlineRGBD"
+    train_shard_pattern: ["dataset/pt/v2/greedy(offline_RGBD_train_greedy)/offline_rl_shard_*.pt","dataset/pt/v2/greedy(offline_RGBD_train_hybird)/offline_rl_shard_*.pt" , "dataset/pt/v2/greedy(offline_RGBD_train_random)/offline_rl_shard_*.pt"]
+    ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
@@ -72,19 +72,19 @@ TRAIN:
     tau: 0.005
     gamma: 0.99
     batch_size: 64
-    num_epochs : 10
+    num_epochs : 1000
 
 LMDB:
   OPEN: False
-  TYPE: "offline"
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(offline_with_RGBD_train)/hybird"
-  TO_PATH: "dataset/pt/v2/greedy(offline_RGBD_train_hybird)"
+  TYPE: "HybirdNetwork"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val)"
+  TO_PATH: "dataset/pt/v2/greedy(val)"
   CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_telephone"
+  SPLIT: "train_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"

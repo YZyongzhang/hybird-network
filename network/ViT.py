@@ -84,7 +84,7 @@ class AudioCNNEncoder(nn.Module):
 
 
 class VisualEncoder(nn.Module):
-    def __init__(self,   input_dim = 4, kernel_size = 32, output_dim = 128):
+    def __init__(self,   input_dim = 8, kernel_size = 32, output_dim = 128):
         super().__init__()
         self.input_dim = input_dim
         self.kernel_size = kernel_size

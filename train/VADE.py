@@ -181,6 +181,84 @@ class LoadLmdb:
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
     
     @classmethod
+    def load_two_frame_pt(cls , path , config):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 10000  # 每个shard包含的样本数
+        shard_id = 0
+
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+    
+            for i in range(len(obs) - 1): # 去除最后没有动作的终态
+                v_now = obs[i]
+                
+                if i != 0:
+                    v_pre = obs[i - 1]
+                a = action_id[i]
+                r = rewards[i]
+                d = dones[i]
+
+                # 提取特征
+                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                depth_now = torch.from_numpy(v_now['depth']).float() 
+                if i == 0:
+                    rgb_pre = torch.zeros_like(rgb_now)
+                    depth_pre = torch.zeros_like(depth_now)
+                else:
+                    rgb_pre = torch.from_numpy(v_pre['rgb']).float() / 255.0
+                    depth_pre = torch.from_numpy(v_pre['depth']).float()
+                audio = torch.from_numpy(v_now['spectrogram'][0]).float()
+
+                # 去除上一步的audio，将两帧img拼接一起
+                rgb = torch.cat([rgb_pre , rgb_now] , dim=1)
+                depth = torch.cat([depth_pre , depth_now] , dim=1)
+
+
+                action = torch.tensor(a, dtype=torch.long)
+                angel = np.degrees(obs[i]['angle'][1])
+                buffer_rgb.append(rgb)
+                buffer_depth.append(depth)
+                buffer_audios.append(audio)
+                buffer_actions.append(action)
+                buffer_angles.append(torch.tensor(angel))
+                # 写一个 shard
+                if len(buffer_rgb) >= shard_size:
+                    torch.save({
+                        'rgb': torch.stack(buffer_rgb),
+                        'depth':torch.stack(buffer_depth),
+                        'audios': torch.stack(buffer_audios),
+                        'actions': torch.stack(buffer_actions),
+                        'angles':torch.stack(buffer_angles)
+                    }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+
+                    print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+
+                    buffer_rgb, buffer_depth , buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+                    shard_id += 1
+
+        # 保存最后一个不满 shard 的数据
+        if buffer_rgb:
+            torch.save({
+                'rgb': torch.stack(buffer_rgb),
+                'depth':torch.stack(buffer_depth),
+                'audios': torch.stack(buffer_audios),
+                'actions': torch.stack(buffer_actions),
+                'angles':torch.stack(buffer_angles)
+            }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+            print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+    @classmethod
     def load_offline(cls, path, model, config):
         """
 
@@ -475,13 +553,15 @@ class ShardedPTDataset(Dataset):
         return  std_audio, rgb , depth , angle , action
       
 class ShardedPTDatasetOffline(Dataset):
-    def __init__(self, shard_pattern="./dataset/pt/offline/offline_model_shard_*.pt", preload=True):
+    def __init__(self, shard_pattern=["./dataset/pt/offline/offline_model_shard_*.pt"], preload=True):
         """
         shard_pattern: shard 文件路径模式，比如 ./dataset/pt/foundation_model_shard_*.pt
         preload: 是否把所有 shard 一次性加载到内存（大数据集建议 False）
         """
         super().__init__()
-        self.shard_files = sorted(glob.glob(shard_pattern))
+        self.shard_files = []
+        for pattern in shard_pattern:
+            self.shard_files.extend(sorted(glob.glob(pattern))[:5])
         assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
 
         self.preload = preload

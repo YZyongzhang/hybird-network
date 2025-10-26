@@ -25,6 +25,8 @@ if __name__ == "__main__":
         from train import LoadLmdb
         if loadlmdb_config.TYPE == "HybirdNetwork":
             LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
+        elif loadlmdb_config.TYPE == "HybirdNetworkTwoFrame":
+            LoadLmdb.load_two_frame_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
         elif loadlmdb_config.TYPE == "offline":
             from network import HybirdNetwork
             import torch

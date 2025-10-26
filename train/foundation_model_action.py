@@ -31,22 +31,15 @@ class Train:
         for ep in range(self.epoch):
             local_step = 0
             epoch_angle_loss = 0.0
-            frist = True
             for batch in self.train_loader:
 
                 batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
 
                 batch_audio  , batch_rgb ,batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
-                
-                if frist:
-                    pre_rgb = torch.zeros_like(batch_rgb)
-                    pre_depth = torch.zeros_like(batch_depth)
-                    frist = False
 
-                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
-                pre_rgb = batch_rgb
-                pre_depth = batch_depth
+                
+                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
                 loss_action = F.cross_entropy(action_predict , batch_action)
                 self.optimizer.zero_grad()
                 loss_action.backward()
@@ -84,20 +77,12 @@ class Train:
         total_acc = 0.0
         correct = 0
         with torch.no_grad():
-            frist = True
             for batch in self.val_loader:
                 batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action = batch
                 batch_audio  , batch_rgb , batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
                 batch_action = batch_action.long()
-                if frist:
-                    pre_rgb = torch.zeros_like(batch_rgb)
-                    pre_depth = torch.zeros_like(batch_depth)
-                    frist = False
                 
-                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth , pre_rgb , pre_depth)
-                pre_rgb = batch_rgb
-                pre_depth = batch_depth
-                
+                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
                 action_loss = F.cross_entropy(action_predict , batch_action)
                 
                 val_action_loss += action_loss.item()
