@@ -143,15 +143,85 @@ class Network(nn.Module):
 
         finnal_output = self.final(share_encoder)
         return finnal_output
-        # return attentioned
+        return attentioned
+    # def forward(self,audio , rgb , depth):
+    #     if len(audio.shape) == 3:
+    #         audio = audio.unsqueeze(0)
+    #     if len(rgb.shape) == 3:
+    #         rgb = rgb.unsqueeze(0)
+    #     if len(depth.shape) == 3:
+    #         depth = depth.unsqueeze(0)
+    #     rgb = rgb.permute(0,3, 1, 2)
+    #     depth = depth.permute(0,3, 1, 2)
+    #     rgbd = torch.cat([rgb, depth], dim=1)
+    #     audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        
+        
+    #     with torch.no_grad():
+    #         audio_encoder = self.audio_encoder.encoder_forward(audio)
+    #     visual_cnn = self.visual_encoder(rgbd)
+    #     v_batch , v_dim , v_h , v_w = visual_cnn.shape
+    #     visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
+    #     v_position = self.add_position(visual_cnn)
+    #     visual_cnn = visual_cnn + v_position
+    #     visual_encoder = self.visual_transformer_encoder(visual_cnn)
+    #     concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
+    #     share_visual_audio_encoder = self.vaencoder(concat_encoder)
+    #     p_share_encoder = self.add_position(share_visual_audio_encoder)
+    #     share_encoder = share_visual_audio_encoder + p_share_encoder
+
+    #     finnal_output = self.final(share_encoder)
+    #     return finnal_output
     
+<<<<<<< HEAD
     def embedding_forward(self, audio , rgb , depth  , pre_rgb , pre_depth):
+=======
+    # def embedding_forward(self, audio , rgb , depth  , pre_rgb , pre_depth):
+    #     if len(audio.shape) == 3:
+    #         audio = audio.unsqueeze(0)
+    #     if len(rgb.shape) == 3:
+    #         rgb = rgb.unsqueeze(0)
+    #     if len(depth.shape) == 3:
+    #         depth = depth.unsqueeze(0)
+    #     if len(pre_rgb.shape) == 3:
+    #         pre_rgb = pre_rgb.unsqueeze(0)
+    #     if len(pre_depth.shape) == 3:
+    #         pre_depth = pre_depth.unsqueeze(0)
+    #     rgb = rgb.permute(0,3, 1, 2)
+    #     depth = depth.permute(0,3, 1, 2)
+    #     pre_rgb = pre_rgb.permute(0,3, 1, 2)
+    #     pre_depth = pre_depth.permute(0,3, 1, 2)
+    #     rgbd = torch.cat([rgb, depth], dim=1)
+    #     pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
+    #     total = torch.cat([rgbd , pre_rgbd] , dim=1)
+    #     audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        
+        
+    #     with torch.no_grad():
+    #         audio_encoder = self.audio_encoder.encoder_forward(audio)
+    #     visual_cnn = self.visual_encoder(total)
+    #     v_batch , v_dim , v_h , v_w = visual_cnn.shape
+    #     visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
+    #     v_position = self.add_position(visual_cnn)
+    #     visual_cnn = visual_cnn + v_position
+    #     visual_encoder = self.visual_transformer_encoder(visual_cnn)
+    #     concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
+    #     share_visual_audio_encoder = self.vaencoder(concat_encoder)
+    #     p_share_encoder = self.add_position(share_visual_audio_encoder)
+    #     share_encoder = share_visual_audio_encoder + p_share_encoder
+    #     embedding = self.final.fc1(share_encoder)
+    #     embedding.squeeze(0)
+    #     return embedding
+        # return attentioned
+    def embedding_forward(self, audio , rgb , depth):
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
         if len(audio.shape) == 3:
             audio = audio.unsqueeze(0)
         if len(rgb.shape) == 3:
             rgb = rgb.unsqueeze(0)
         if len(depth.shape) == 3:
             depth = depth.unsqueeze(0)
+<<<<<<< HEAD
         if len(pre_rgb.shape) == 3:
             pre_rgb = pre_rgb.unsqueeze(0)
         if len(pre_depth.shape) == 3:
@@ -160,6 +230,12 @@ class Network(nn.Module):
         depth = depth.permute(0,3, 1, 2)
         pre_rgb = pre_rgb.permute(0,3, 1, 2)
         pre_depth = pre_depth.permute(0,3, 1, 2)
+=======
+
+        rgb = rgb.permute(0,3, 1, 2)
+        depth = depth.permute(0,3, 1, 2)
+
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
         rgbd = torch.cat([rgb, depth], dim=1)
         pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
         total = torch.cat([rgbd , pre_rgbd] , dim=1)
@@ -181,4 +257,3 @@ class Network(nn.Module):
         embedding = self.final.fc1(share_encoder)
         embedding.squeeze(0)
         return embedding
-        # return attentioned

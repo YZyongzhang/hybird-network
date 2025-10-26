@@ -242,6 +242,7 @@ class OfflineCollect:
                 # hybird network 
                 self.save_data = copy.deepcopy(self.save_data_struct)
                 step = 0
+<<<<<<< HEAD
                 path_point = []
                 obs = self.env.reset()
                 done = False
@@ -264,6 +265,34 @@ class OfflineCollect:
                     logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
                     action = torch.argmax(logits).item()
                     self.save(action_id = action)
+=======
+                pre_action_collided = False
+                path_point = []
+                obs = self.env.reset()
+                self.save(obs=obs)
+
+                done = False
+                
+                self.save(sound_id = self.env._env.current_episode.info['sound'])
+                path_point.append(self.sim.get_agent_state().position)
+                while not done:
+                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                    depth = torch.from_numpy(obs['depth']).float()
+                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                    with torch.no_grad():
+                        logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+                    action = torch.argmax(logits).item()
+                    self.save(action_id = action)
+
+                    obs , reward , done , info = self.env.step(action=action)
+                    if self.sim.previous_step_collided:
+                        reward -= 1
+                        pre_action_collided = self.sim.previous_step_collided
+                    elif pre_action_collided:
+                        pre_action_collided = False
+                        reward +=1
+                    step +=1
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
                     self.save(obs=obs,reward=reward,done=done,info=info)
                     path_point.append(self.sim.get_agent_state().position)
                     if done or step > 20:
@@ -278,7 +307,12 @@ class OfflineCollect:
                         self.save(obs=obs,reward=reward,done=done,info=info)
                         path_point.append(self.sim.get_agent_state().position)
                         if done:
+                            # 这个地方会出现一次超过最大步数的done。所以如果没有break就会报错
                             print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
+<<<<<<< HEAD
+=======
+                            break
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
                 
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)

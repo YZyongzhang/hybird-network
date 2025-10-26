@@ -32,6 +32,7 @@ class OnlineTest:
                 audio = torch.from_numpy(obs['spectrogram'][0]).float()
                 pre_rgb = torch.zeros_like(rgb)
                 pre_depth = torch.zeros_like(depth)
+<<<<<<< HEAD
                 state = self.hybirdmodel.embedding_forward(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
                 action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
                 # state = self.hybirdmodel.embedding_forward(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
@@ -41,8 +42,19 @@ class OnlineTest:
                 action_hybird = action_hybird.argmax(dim=1).item()
                 pre_rgb = rgb
                 pre_depth = depth
+=======
+                # state = self.hybirdmodel.embedding_forward(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
+                # action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
+                state = self.hybirdmodel.embedding_forward(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
+                action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
+                action_logits = sac_model(state.to('cuda'))
+                action_sac = action_logits.argmax(dim=1).item()
+                action_hybird = action_hybird.argmax(dim=1).item()
+                # pre_rgb = rgb
+                # pre_depth = depth
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
             while not done or step < 100:
-                obs , reward , done , info = self.env.step(action=action_hybird)
+                obs , reward , done , info = self.env.step(action=action_sac)
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
                 with torch.no_grad():
@@ -50,6 +62,7 @@ class OnlineTest:
                     rgb = torch.from_numpy(obs['rgb']).float() / 255.0
                     depth = torch.from_numpy(obs['depth']).float()
                     audio = torch.from_numpy(obs['spectrogram'][0]).float()
+<<<<<<< HEAD
                     state = self.hybirdmodel.embedding_forward(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') ,  pre_rgb.to('cuda') , pre_depth.to('cuda'))
                     action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
                     # state = self.hybirdmodel.embedding_forward(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
@@ -59,6 +72,17 @@ class OnlineTest:
                     action_hybird = action_hybird.argmax(dim=1).item()
                     pre_rgb = rgb
                     pre_depth = depth
+=======
+                    # state = self.hybirdmodel.embedding_forward(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') ,  pre_rgb.to('cuda') , pre_depth.to('cuda'))
+                    # action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
+                    state = self.hybirdmodel.embedding_forward(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
+                    action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
+                    action_sac = sac_model(state.to('cuda'))
+                    action_sac = action_sac.argmax(dim=1).item()
+                    action_hybird = action_hybird.argmax(dim=1).item()
+                    # pre_rgb = rgb
+                    # pre_depth = depth
+>>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
                 step +=1
                 epsiode_reward +=reward
                 if done or step >= 100:

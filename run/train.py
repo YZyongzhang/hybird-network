@@ -15,6 +15,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
         
         train_dataset = ShardedPTDatasetOffline(shard_pattern=config.train_shard_pattern)
         print(train_dataset.__len__())
+        import pdb;pdb.set_trace()
         train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True ,  pin_memory=True)
         if config.SAVE_LOADER:
             with open('train_loader.pkl' , 'wb') as f:
@@ -51,6 +52,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
         val_dataset = ShardedPTDataset(shard_pattern=config.val_shard_pattern)
         print(train_dataset.__len__())
         print(val_dataset.__len__())
+        import pdb;pdb.set_trace()
         train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True ,  pin_memory=True)
         val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , pin_memory=True)
         if config.SAVE_LOADER:
