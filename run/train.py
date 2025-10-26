@@ -40,7 +40,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
             device = device
         else:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        lr = 1e-5
+        lr = 1e-6
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
         save_dir = config.EXPERIMENT_CKPT_DIR
         os.makedirs(save_dir, exist_ok=True)
