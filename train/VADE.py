@@ -12,7 +12,7 @@ import torch
 import numpy as np
 from PIL import Image
 import random
-from network.foundation_model import Network
+from network.hybird.foundation_model import Network
 import glob
 class LoadLmdb:
 
@@ -222,9 +222,8 @@ class LoadLmdb:
                 audio = torch.from_numpy(v_now['spectrogram'][0]).float()
 
                 # 去除上一步的audio，将两帧img拼接一起
-                rgb = torch.cat([rgb_pre , rgb_now] , dim=1)
-                depth = torch.cat([depth_pre , depth_now] , dim=1)
-
+                rgb = torch.cat([rgb_pre , rgb_now] , dim=2)
+                depth = torch.cat([depth_pre , depth_now] , dim=2)
 
                 action = torch.tensor(a, dtype=torch.long)
                 angel = np.degrees(obs[i]['angle'][1])
@@ -258,6 +257,96 @@ class LoadLmdb:
                 'angles':torch.stack(buffer_angles)
             }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+
+    @classmethod
+    def load_offline_lstm(cls, path, model, config, seq_len=5):
+        """
+        构建 LSTM 时序输入的 offline 数据。
+        每个样本是一个长度为 seq_len 的序列：
+            - states: [seq_len, feature_dim]
+            - actions: [seq_len]
+            - rewards: [seq_len]
+            - dones: [seq_len]
+        """
+
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 2000  # 每个shard包含的序列数
+        shard_id = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading LSTM offline data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist()
+
+            # 编码整个轨迹
+            encoded_states = []
+            with torch.no_grad():
+                for v in obs:
+                    rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                    depth = torch.from_numpy(v['depth']).float()
+                    audio = torch.from_numpy(v['spectrogram'][0]).float()
+
+                    state = model.embedding_forward(
+                        audio.to(model.device),
+                        rgb.to(model.device),
+                        depth.to(model.device)
+                    )
+                    encoded_states.append(state.cpu())
+
+            # 构造时序样本（滑动窗口）
+            traj_len = len(encoded_states)
+            for i in range(traj_len - seq_len):
+                state_seq = torch.stack(encoded_states[i:i+seq_len])              # 当前状态序列
+                next_state_seq = torch.stack(encoded_states[i+1:i+1+seq_len])    # 下一个状态序列
+                a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
+                r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
+                d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
+
+                buffer_states.append(state_seq)
+                buffer_next_states.append(next_state_seq)
+                buffer_actions.append(a_seq)
+                buffer_rewards.append(r_seq)
+                buffer_dones.append(d_seq)
+
+                # 存 shard
+                if len(buffer_states) >= shard_size:
+                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+                    torch.save({
+                        'states': torch.stack(buffer_states),
+                        'next_states': torch.stack(buffer_next_states),
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+
+                    buffer_states, buffer_next_states = [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
+                    shard_id += 1
+
+        # 保存最后一批
+        if buffer_states:
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save({
+                'states': torch.stack(buffer_states),
+                'next_states': torch.stack(buffer_next_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"保存 shard {shard_id}, size={len(buffer_states)})")
+
     @classmethod
     def load_offline(cls, path, model, config):
         """

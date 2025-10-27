@@ -2,10 +2,10 @@ import sys
  
 import torch
 import torch.nn as nn
-from network.ViT import ViTEncoder
-from network.audio import AudioCRNN
-from network.ViT import VisualEncoder , PositionalEcoder
-from network.Encoder import Encoder
+from network.hybird.ViT import ViTEncoder
+from network.hybird.audio import AudioCRNN
+from network.hybird.ViT import VisualEncoder , PositionalEcoder
+from network.hybird.Encoder import Encoder
 class Attention(nn.Module):
     def __init__(self , input_dim , visual_dim , audio_dim ,hidden_dim, output_dim):
         super().__init__()

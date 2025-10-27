@@ -53,14 +53,15 @@ TRAIN:
   # VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 100
   BATCH_SIZE: 128
-  train_shard_pattern: ["dataset/hybird/pt/v2/greedy(RGBD_train)/foundation_model_shard_*.pt" , "dataset/hybird/pt/v2/greedy(RGBD_collided)/foundation_model_shard_*.pt"]
-  val_shard_pattern: ["dataset/hybird/pt/v2/greedy(RGBD_val)/foundation_model_shard_*.pt"]
+  train_shard_pattern: ["dataset/hybird/pt/v1/two_frame(train)/foundation_model_shard_*.pt" , "dataset/hybird/pt/v1/two_frame(collided)/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["dataset/hybird/pt/v1/two_frame(val)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
+    model: "v2"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/every_epoch_10"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v2model"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/offlineRGBD"
     train_shard_pattern: ["dataset/pt/v2/greedy(offline_RGBD_train_greedy)/offline_rl_shard_*.pt","dataset/pt/v2/greedy(offline_RGBD_train_hybird)/offline_rl_shard_*.pt" , "dataset/pt/v2/greedy(offline_RGBD_train_random)/offline_rl_shard_*.pt"]
     ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
@@ -77,9 +78,9 @@ TRAIN:
 
 LMDB:
   OPEN: False
-  TYPE: "HybirdNetwork"
+  TYPE: "HybirdNetworkTwoFrame"
   RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val)"
-  TO_PATH: "dataset/pt/v2/greedy(val)"
+  TO_PATH: "dataset/hybird/pt/v1/two_frame(val)"
   CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
 
 

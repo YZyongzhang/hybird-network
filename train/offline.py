@@ -29,18 +29,15 @@ class OfflineTrain:
                 states , next_states , actions , rewards , dones = batch
                 loss_dict = self.agent.update(states, actions , rewards, next_states ,  dones)
 
-
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
-
-                tqdm.write(f"step:{global_step} ,critic_1_loss:{loss_dict['critic_1_loss']} , critic_2_loss : {loss_dict['critic_2_loss']} , actor_loss : {loss_dict['actor_loss']} , alpha_loss:{loss_dict['alpha_loss']}")
-
+                tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
             if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
             if epoch % 10 == 0:
                 # train_acc = self.val(epoch)
                 self.agent.eval()
-                online_reward  , spl = self.online_test.rollout(self.agent.actor ,logger )
+                online_reward  , spl = self.online_test.rollout(self.agent ,logger )
                 self.agent.train()
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)

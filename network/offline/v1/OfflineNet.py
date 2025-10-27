@@ -84,6 +84,7 @@ class SAC_model(torch.nn.Module):
                                dim=1,
                                keepdim=True)
         next_value = min_qvalue + self.log_alpha.exp() * entropy
+        import pdb;pdb.set_trace()
         td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 

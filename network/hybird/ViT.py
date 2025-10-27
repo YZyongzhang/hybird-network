@@ -3,7 +3,7 @@ import sys
 import torch
 import torch.nn as nn
 import torch.functional as F
-from network.Encoder import Encoder
+from network.hybird.Encoder import Encoder
 
 class PositionalEcoder(nn.Module):
     def __init__(self, max_len = 10000, d_models = 128 , device = None):

@@ -36,8 +36,7 @@ class OnlineTest:
                 # action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
                 state = self.hybirdmodel.embedding_forward(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
                 action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
-                action_logits = sac_model(state.to('cuda'))
-                action_sac = action_logits.argmax(dim=1).item()
+                action_sac = sac_model.get_action(state.to('cuda'))
                 action_hybird = action_hybird.argmax(dim=1).item()
                 # pre_rgb = rgb
                 # pre_depth = depth
@@ -54,8 +53,7 @@ class OnlineTest:
                     # action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda') , pre_rgb.to('cuda') , pre_depth.to('cuda'))
                     state = self.hybirdmodel.embedding_forward(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
                     action_hybird = self.hybirdmodel(audio.to("cuda") , rgb.to('cuda') , depth.to('cuda'))
-                    action_sac = sac_model(state.to('cuda'))
-                    action_sac = action_sac.argmax(dim=1).item()
+                    action_sac = sac_model.get_action(state.to('cuda'))
                     action_hybird = action_hybird.argmax(dim=1).item()
                     # pre_rgb = rgb
                     # pre_depth = depth
