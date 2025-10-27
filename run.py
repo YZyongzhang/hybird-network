@@ -73,7 +73,7 @@ if __name__ == "__main__":
             target_entropy = offline_config.target_entropy  
             tau = offline_config.tau
             gamma = offline_config.gamma
-
+            beta = offline_config.beta
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             sac_model = SAC_model(
                 state_dim=state_dim,
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                 target_entropy=target_entropy,
                 tau=tau,
                 gamma=gamma,
-                beta=1,
+                beta=beta,
                 device=device
             )
             if offline_config.LOAD_PATH:

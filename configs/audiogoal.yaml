@@ -44,9 +44,9 @@ COLLECT:
   COLLECT_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   SAVE_LOADER: False
-  TYPE: "HybirdNetwork" # HybirdNetwork OfflineRL
+  TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   EXPERIMENT_LOSS_DIR: "compare/loss/hybirdnetwork_RGBD_two_frame"
   EXPERIMENT_CKPT_DIR: "compare/ckpt/hybirdnetwork_RGBD_two_frame"
   # TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
@@ -60,7 +60,7 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/offlineRGBD"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/every_epoch_10"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/offlineRGBD"
     train_shard_pattern: ["dataset/pt/v2/greedy(offline_RGBD_train_greedy)/offline_rl_shard_*.pt","dataset/pt/v2/greedy(offline_RGBD_train_hybird)/offline_rl_shard_*.pt" , "dataset/pt/v2/greedy(offline_RGBD_train_random)/offline_rl_shard_*.pt"]
     ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
@@ -70,6 +70,7 @@ TRAIN:
     lr: 0.0004
     target_entropy: -4
     tau: 0.005
+    beta: 0.2
     gamma: 0.99
     batch_size: 64
     num_epochs : 1000
@@ -84,8 +85,8 @@ LMDB:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_telephone"
+  SPLIT: "val_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
