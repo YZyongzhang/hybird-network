@@ -62,9 +62,10 @@ TRAIN:
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
     EXPERIMENT_LOSS_DIR: "offlineRL/loss/v2model"
-    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/offlineRGBD"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v2model"
     train_shard_pattern: ["dataset/pt/v2/greedy(offline_RGBD_train_greedy)/offline_rl_shard_*.pt","dataset/pt/v2/greedy(offline_RGBD_train_hybird)/offline_rl_shard_*.pt" , "dataset/pt/v2/greedy(offline_RGBD_train_random)/offline_rl_shard_*.pt"]
-    ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
+    # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
+    ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
@@ -74,7 +75,7 @@ TRAIN:
     beta: 0.2
     gamma: 0.99
     batch_size: 64
-    num_epochs : 1000
+    num_epochs : 1
 
 LMDB:
   OPEN: False
@@ -90,4 +91,4 @@ DATASET:
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
