@@ -97,7 +97,7 @@ class OnlineTest:
                 pre_rgb = rgb
                 pre_depth = depth
             while not done or step < 100:
-                obs , reward , done , info = self.env.step(action=action_hybird)
+                obs , reward , done , info = self.env.step(action=action_sac)
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
                 with torch.no_grad():

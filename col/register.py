@@ -320,7 +320,7 @@ class OfflineCollect:
         with open(f"{self.save_data_dir}/{level}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
             pickle.dump(self.save_data , f)
         self.save_data = None
-@CollectRegister.register("random")
+@CollectRegister.register("random_v2") # 这个不知道都是啥
 class RandomCollect:
     def __init__(self , env:AudioNavRLEnv , config:Config):
         self.env = env

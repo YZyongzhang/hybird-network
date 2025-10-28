@@ -35,6 +35,14 @@ if __name__ == "__main__":
             model.load_state_dict(torch.load(loadlmdb_config.CKPT))
             model.eval()
             LoadLmdb.load_offline(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
+        elif loadlmdb_config.TYPE == "offlinetwoframe":
+            from network import HybirdNetwork
+            import torch
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = HybirdNetwork().to(device)
+            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.eval()
+            LoadLmdb.load_offline_two_frame(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
     
     elif task_config.TRAIN.OPEN:
         train_config = task_config.TRAIN

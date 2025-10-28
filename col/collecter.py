@@ -12,10 +12,10 @@ class COLLECTER:
     def __init__(self,config:Config,env:AudioNavRLEnv , **kwargs):
         self.env = env
         self.collect_config = config.TASK_CONFIG.COLLECT
-        if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle' , 'offlineRL']:
+        if self.collect_config.TYPE in ['greedy' , 'collided' , 'random' , 'angle' , 'offlineRL' , 'offlineRLtwoframe']:
             cls = CollectRegister.get(self.collect_config.TYPE)
             
-            if self.collect_config.TYPE in ['offlineRL' , 'collided']:
+            if self.collect_config.TYPE in ['offlineRL' , 'offlineRLtwoframe' ,'collided']:
                 self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
             else:
                 self.collecter = cls(self.env , self.collect_config)

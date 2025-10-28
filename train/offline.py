@@ -34,7 +34,7 @@ class OfflineTrain:
                 tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
             if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % 1 == 0:
+            if epoch % 10 == 0:
                 # train_acc = self.val(epoch)
                 self.agent.eval()
                 online_reward  , spl = self.online_test.rollout_two_frame(self.agent ,logger )

@@ -64,8 +64,8 @@ class SAC_model(torch.nn.Module):
         self.device = device
         self.beta = beta  # CQL的超参数
 
-    def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+    def get_action(self, state):
+        # state = torch.tensor([state], dtype=torch.float).to(self.device)
         probs = self.actor(state)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
@@ -84,7 +84,6 @@ class SAC_model(torch.nn.Module):
                                dim=1,
                                keepdim=True)
         next_value = min_qvalue + self.log_alpha.exp() * entropy
-        import pdb;pdb.set_trace()
         td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
@@ -159,8 +158,8 @@ class SAC_model(torch.nn.Module):
         self.soft_update(self.critic_1, self.target_critic_1)
         self.soft_update(self.critic_2, self.target_critic_2)
         return {
-            'critic_1_loss': critic_1_loss.item(),
-            'critic_2_loss': critic_2_loss.item(),
+            'critic1_loss': critic_1_loss.item(),
+            'critic2_loss': critic_2_loss.item(),
             'actor_loss': actor_loss.item(),
             'alpha_loss': alpha_loss.item(),
             'cql_1_loss': cql_1_loss.item(),

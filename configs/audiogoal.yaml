@@ -36,12 +36,12 @@ TASK:
     
 COLLECT:
   OPEN: False
-  TYPE: "offlineRL"
+  TYPE: "offlineRLtwoframe"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[]}
-  DATA_DIR: "dataset/pickle/v2/greedy(offline_with_RGBD_resacle_reward)" #"pickle/greedy"
+  DATA_DIR: "dataset/pickle/v2/greedy(offline_with_RGBD_resacle_reward_two_frame)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
-  COLLECT_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
+  COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
   OPEN: True
@@ -57,13 +57,13 @@ TRAIN:
   val_shard_pattern: ["dataset/hybird/pt/v1/two_frame(val)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
-    model: "v2"
+    model: "v1"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v2model"
-    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v2model"
-    train_shard_pattern: ["dataset/pt/v2/greedy(offline_RGBD_train_greedy)/offline_rl_shard_*.pt","dataset/pt/v2/greedy(offline_RGBD_train_hybird)/offline_rl_shard_*.pt" , "dataset/pt/v2/greedy(offline_RGBD_train_random)/offline_rl_shard_*.pt"]
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v2model/1"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v2model/1"
+    train_shard_pattern: ["dataset/offline/pt/v2/two_frame(greedy)/offline_rl_shard_*.pt","dataset/offline/pt/v2/two_frame(hybird)/offline_rl_shard_*.pt", "dataset/offline/pt/v2/two_frame(random)/offline_rl_shard_*.pt"]
     # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
@@ -75,14 +75,14 @@ TRAIN:
     beta: 0.2
     gamma: 0.99
     batch_size: 64
-    num_epochs : 1
+    num_epochs : 300
 
 LMDB:
   OPEN: False
-  TYPE: "HybirdNetworkTwoFrame"
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val)"
-  TO_PATH: "dataset/hybird/pt/v1/two_frame(val)"
-  CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
+  TYPE: "offlinetwoframe"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(offline_with_RGBD_resacle_reward_two_frame)/random"
+  TO_PATH: "dataset/offline/pt/v1/two_frame(random)"
+  CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
@@ -91,4 +91,4 @@ DATASET:
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
