@@ -107,27 +107,28 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         return action.numpy()
 
     def calc_policy_loss(self, states, alpha):
-        actions_pred, log_pis = self.actor_local.evaluate(states)
+        _, action_probs, log_pis = self.actor_local.evaluate(states)
 
-        q1 = self.critic1(states, actions_pred.squeeze(0))
-        q2 = self.critic2(states, actions_pred.squeeze(0))
-        min_Q = torch.min(q1, q2).cpu()
-        actor_loss = ((alpha * log_pis.cpu() - min_Q)).mean()
-        return actor_loss.cuda(), log_pis
+        q1 = self.critic1(states)   
+        q2 = self.critic2(states)
+        min_Q = torch.min(q1,q2)
+        actor_loss = (action_probs * (alpha.to(self.device) * log_pis - min_Q )).sum(1).mean()
+        log_action_pi = torch.sum(log_pis * action_probs, dim=1)
+        return actor_loss, log_action_pi
 
-    def _compute_policy_values(self, obs_pi, obs_q):
-        # with torch.no_grad():
-        actions_pred, log_pis = self.actor_local.evaluate(obs_pi)
+    # def _compute_policy_values(self, obs_pi, obs_q):
+    #     # with torch.no_grad():
+    #     actions_pred, log_pis = self.actor_local.evaluate(obs_pi)
 
-        qs1 = self.critic1(obs_q, actions_pred)
-        qs2 = self.critic2(obs_q, actions_pred)
+    #     qs1 = self.critic1(obs_q, actions_pred)
+    #     qs2 = self.critic2(obs_q, actions_pred)
 
-        return qs1 - log_pis.detach(), qs2 - log_pis.detach()
+    #     return qs1 - log_pis.detach(), qs2 - log_pis.detach()
 
-    def _compute_random_values(self, obs, actions, critic):
-        random_values = critic(obs, actions)
-        random_log_probs = math.log(0.5 ** self.action_size)
-        return random_values - random_log_probs
+    # def _compute_random_values(self, obs, actions, critic):
+    #     random_values = critic(obs, actions)
+    #     random_log_probs = math.log(0.5 ** self.action_size)
+    #     return random_values - random_log_probs
 
     def learn(self, states, actions, rewards, next_states, dones):
         """Updates actor, critics and entropy_alpha parameters using given batch of experience tuples.
@@ -153,18 +154,7 @@ class CQLSAC_hybrid_LSTM(nn.Module):
 
 
         batch_size=states.shape[0]
-        actions=np.array(actions.cpu())
-        #action space 归一化
-        # 定义每个维度的最小和最大值,每个环境不一样
-        min_val = np.array([-30, -100]).astype(np.float32)
-        max_val = np.array([30, 100]).astype(np.float32)
 
-        # 将数据归一化到0到1的范围
-        normalized_data = ((actions - min_val) / (max_val - min_val)).astype(np.float32)
-
-        # 将数据归一化到-1到1的范围
-        normalized_data = (2 * normalized_data - 1).astype(np.float32)
-        actions = torch.from_numpy(normalized_data).to(self.device)
 
         #--------------------------------Image processing------------------------#
 
@@ -197,53 +187,30 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         # ---------------------------- update critic ---------------------------- #
         # Get predicted next-state actions and Q values from target models
         with torch.no_grad():
-            next_action, new_log_pi = self.actor_local.evaluate(next_states)
-            Q_target1_next = self.critic1_target(next_states, next_action)
-            Q_target2_next = self.critic2_target(next_states, next_action)
-            Q_target_next = torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * new_log_pi
-            # Compute Q targets for current states (y_i)
-            Q_targets = rewards.reshape(batch_size*self.lstm_seq_len,1) + (self.gamma * (1 - dones.reshape(batch_size*self.lstm_seq_len,1)) * Q_target_next)
+            _, action_probs, log_pis = self.actor_local.evaluate(next_states)
+            Q_target1_next = self.critic1_target(next_states)
+            Q_target2_next = self.critic2_target(next_states)
+            Q_target_next = action_probs * (torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * log_pis)
+
+
+            Q_targets = rewards.reshape(batch_size*self.lstm_seq_len,1) + (self.gamma * (1 - dones.reshape(batch_size*self.lstm_seq_len,1)) * Q_target_next.sum(dim=1).unsqueeze(-1))
 
         #
         # # Compute critic loss
-        q1 = self.critic1(states, actions.reshape(batch_size*self.lstm_seq_len,-1))
-        q2 = self.critic2(states, actions.reshape(batch_size*self.lstm_seq_len,-1))
+        q1 = self.critic1(states)
+        q2 = self.critic2(states)
         q1_train =q1.mean()
         q2_train =q2.mean()
 
-        critic1_loss = F.mse_loss(q1, Q_targets)
-        critic2_loss = F.mse_loss(q2, Q_targets)
+        q1_ = q1.gather(1, actions.long())
+        q2_ = q2.gather(1, actions.long())
 
-        # # CQL addon
-        random_actions = torch.FloatTensor(q1.shape[0] * 10, actions.shape[-1]).uniform_(-1, 1).to(self.device)
-        num_repeat = int(random_actions.shape[0] / states.shape[0])
-        temp_states = states.unsqueeze(1).repeat(1, num_repeat, 1).view(states.shape[0] * num_repeat, states.shape[1])
-        temp_next_states = next_states.unsqueeze(1).repeat(1, num_repeat, 1).view(next_states.shape[0] * num_repeat,
-                                                                                  next_states.shape[1])
-        current_pi_values1, current_pi_values2 = self._compute_policy_values(temp_states, temp_states)
-        next_pi_values1, next_pi_values2 = self._compute_policy_values(temp_next_states, temp_states)
 
-        random_values1 = self._compute_random_values(temp_states, random_actions, self.critic1).reshape(states.shape[0],
-                                                                                                        num_repeat, 1)
-        random_values2 = self._compute_random_values(temp_states, random_actions, self.critic2).reshape(states.shape[0],
-                                                                                                        num_repeat, 1)
+        critic1_loss = F.mse_loss(q1_, Q_targets)
+        critic2_loss = F.mse_loss(q2_, Q_targets)
 
-        current_pi_values1 = current_pi_values1.reshape(states.shape[0], num_repeat, 1)
-        current_pi_values2 = current_pi_values2.reshape(states.shape[0], num_repeat, 1)
-
-        next_pi_values1 = next_pi_values1.reshape(states.shape[0], num_repeat, 1)
-        next_pi_values2 = next_pi_values2.reshape(states.shape[0], num_repeat, 1)
-
-        cat_q1 = torch.cat([random_values1, current_pi_values1, next_pi_values1], 1)
-        cat_q2 = torch.cat([random_values2, current_pi_values2, next_pi_values2], 1)
-
-        assert cat_q1.shape == (states.shape[0], 3 * num_repeat, 1), f"cat_q1 instead has shape: {cat_q1.shape}"
-        assert cat_q2.shape == (states.shape[0], 3 * num_repeat, 1), f"cat_q2 instead has shape: {cat_q2.shape}"
-
-        cql1_scaled_loss = ((torch.logsumexp(cat_q1 / self.temp,
-                                             dim=1).mean() * self.cql_weight * self.temp) - q1.mean()) * self.cql_weight
-        cql2_scaled_loss = ((torch.logsumexp(cat_q2 / self.temp,
-                                             dim=1).mean() * self.cql_weight * self.temp) - q2.mean()) * self.cql_weight
+        cql1_scaled_loss = torch.logsumexp(q1, dim=1).mean() - q1.mean()
+        cql2_scaled_loss = torch.logsumexp(q2, dim=1).mean() - q2.mean()
 
         cql_alpha_loss = torch.FloatTensor([0.0])
         cql_alpha = torch.FloatTensor([0.0])
