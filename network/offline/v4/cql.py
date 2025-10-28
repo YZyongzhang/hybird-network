@@ -3,7 +3,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
-from network.offline.v3.net import Critic, Actor, hybrid_LSTM
+from network.offline.v4.net import Critic, Actor, hybrid_LSTM
 import numpy as np
 import math
 import copy
@@ -17,12 +17,9 @@ class CQLSAC_hybrid_LSTM(nn.Module):
                  tau,
                  hidden_size,
                  learning_rate,
-                 temp,
                  with_lagrange,
-                 cql_weight,
                  target_action_gap,
                  device,
-                 stack_frames,
                  lstm_seq_len,
                  lstm_layer,
                  lstm_out
@@ -38,7 +35,6 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         super(CQLSAC_hybrid_LSTM, self).__init__()
         self.state_size = state_size
         self.action_size = action_size
-        self.stack_frames=stack_frames
         self.device = device
         self.lstm_seq_len = lstm_seq_len
         self.gamma = torch.FloatTensor([0.99]).to(device)
@@ -58,8 +54,7 @@ class CQLSAC_hybrid_LSTM(nn.Module):
 
         # CQL params
         self.with_lagrange = with_lagrange
-        self.temp = temp
-        self.cql_weight = cql_weight
+        # self.temp = temp
         self.target_action_gap = target_action_gap
         self.cql_log_alpha = torch.zeros(1, requires_grad=True)
         self.cql_alpha_optimizer = optim.Adam(params=[self.cql_log_alpha], lr=learning_rate)
@@ -68,8 +63,6 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         self.lstm_layer = lstm_layer
         self.hybrid_LSTM = hybrid_LSTM(state_size=self.state_size,
                                 action_size=self.action_size,
-                                hidden_size=hidden_size,
-                                 stack_frames=self.stack_frames,
                                  lstm_out=lstm_out,
                                  lstm_layer=self.lstm_layer
                                 ).to(self.device)  # obs_shape,frame_stack
@@ -101,7 +94,6 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         with torch.no_grad():
             if eval:
                 action = self.actor_local.get_det_action(state)
-                self.actor_local.train()
             else:
                 action = self.actor_local.get_action(state)
         return action.numpy()
@@ -130,7 +122,7 @@ class CQLSAC_hybrid_LSTM(nn.Module):
     #     random_log_probs = math.log(0.5 ** self.action_size)
     #     return random_values - random_log_probs
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def update(self, states, actions, rewards, next_states, dones):
         """Updates actor, critics and entropy_alpha parameters using given batch of experience tuples.
         Q_targets = r + γ * (min_critic_target(next_state, actor_target(next_state)) - α *log_pi(next_action|next_state))
         Critic_loss = MSE(Q, Q_target)
@@ -143,31 +135,35 @@ class CQLSAC_hybrid_LSTM(nn.Module):
             experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples
             gamma (float): discount factor
         """
+        batch_size=states.shape[0]
+
         states = states.float().to(self.device)
         next_states = next_states.float().to(self.device)
         rewards = rewards.float().to(self.device)
         # import pdb ; pdb.set_trace()
         dones = dones.float().to(self.device)
         actions = actions.long().to(self.device)
-        actions = actions.unsqueeze(1)  # 确保动作是二维的
+        actions = actions.reshape(batch_size*self.lstm_seq_len,-1)
+
+
         
 
 
-        batch_size=states.shape[0]
-
-
         #--------------------------------Image processing------------------------#
+
 
         states = self.hybrid_LSTM(states)
         states=states.reshape(batch_size*self.lstm_seq_len,-1)
         with torch.no_grad():
             next_states = self.hybrid_LSTM(next_states)
             next_states = next_states.reshape(batch_size*self.lstm_seq_len,-1)
+        
 
         # ---------------------------- update actor ---------------------------- #
         current_alpha = copy.deepcopy(self.alpha)
 
         actor_loss, log_pis = self.calc_policy_loss(states, current_alpha)
+
         self.actor_optimizer.zero_grad()
         actor_loss.backward(retain_graph=True)
         self.actor_optimizer.step()
@@ -201,7 +197,6 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         q2 = self.critic2(states)
         q1_train =q1.mean()
         q2_train =q2.mean()
-
         q1_ = q1.gather(1, actions.long())
         q2_ = q2.gather(1, actions.long())
 
@@ -248,7 +243,20 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         self.soft_update(self.critic2, self.critic2_target)
 
 
-        return (q1_train.item(),q2_train.item(),actor_loss.item(), alpha_loss.item(), critic1_loss.item(), critic2_loss.item(), cql1_scaled_loss.item(),cql2_scaled_loss.item(), current_alpha, cql_alpha_loss.item(), cql_alpha.item())
+        return {
+            "q1_train": q1_train.item(),
+            "q2_train": q2_train.item(),
+            "actor_loss": actor_loss.item(),
+            "alpha_loss": alpha_loss.item(),
+            "critic1_loss": critic1_loss.item(),
+            "critic2_loss": critic2_loss.item(),
+            "cql1_scaled_loss": cql1_scaled_loss.item(),
+            "cql2_scaled_loss": cql2_scaled_loss.item(),
+            "current_alpha": current_alpha,
+            "cql_alpha_loss": cql_alpha_loss.item(),
+            "cql_alpha": cql_alpha.item(),
+        }
+
 
     def soft_update(self, local_model, target_model):
         """Soft update model parameters.

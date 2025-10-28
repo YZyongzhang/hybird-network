@@ -488,3 +488,78 @@ class OfflineCollect:
         with open(f"{self.save_data_dir}/{level}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
             pickle.dump(self.save_data , f)
         self.save_data = None
+
+
+@CollectRegister.register("offlineLevel")
+class OffflineLevel:
+    def __init__(self , env:AudioNavRLEnv , config:Config , **kwargs):
+            self.env = env
+            self.sim: SoundSpacesSim = env._env._sim
+            self.save_data_struct = config.DATA_STRUCT
+            self.save_data_dir = config.DATA_DIR
+            self.save_path_img = config.IMG_DIR
+            self.save_path_type = config.IMG_TYPE
+            self.level_rates = {
+                'level1':(0  ,  1),
+                'level2':(0.1 , 1),
+                'level3':(0.2 , 2),
+                'level4':(0.3 , 3),
+                'level5':(0.4 , 4)
+            }# (rate , step )
+            self.level = ['level1' , 'level2' , 'level3' , 'level4' , 'level5']
+            self.action_list = [1,2,3] # 去除step的0
+    def collect(self): 
+        for _ in range(self.env._env.number_of_episodes):
+            # 40% 完全greedy 40% hybirdnetwork 20 % random
+
+            level_name = random.choice(self.level)
+            level_rate , level_step = self.level_rates[level_name]
+            self.save_data = copy.deepcopy(self.save_data_struct)
+            path_point = []
+            obs = self.env.reset()
+            done = False
+            self.save(sound_id = self.env._env.current_episode.info['sound'])
+            self.save(obs=obs)
+            path_point.append(self.sim.get_agent_state().position)
+            while not done:
+                action_id = self.sim.compute_oracle_actions() # 获取greedy的action list
+                self.save(greedy_action = action_id)
+                for action_step , action in enumerate(action_id):
+                    # 针对每一步进行level筛选
+                    if action_step + 1 >= level_step: # 将index转化为step num ， 每一次等于level_step
+                        # 进行概率判断
+                        episilon = random.random() 
+                        if episilon <= level_rate:
+                            action = random.choice(self.action_list) # 进行 noise 干扰 , 否则action不变
+                            self.save(action_id = action)
+                            obs , reward , done , info = self.env.step(action=action)
+                            self.save(obs=obs,reward=reward,done=done,info=info)
+                            path_point.append(self.sim.get_agent_state().position)
+                            break # 终止循环。
+                        else:
+                            self.save(action_id = action)
+                            obs , reward , done , info = self.env.step(action=action)
+                            self.save(obs=obs,reward=reward,done=done,info=info)
+                            path_point.append(self.sim.get_agent_state().position)
+                    else:
+                        # 按照正常的逻辑action进行step
+                        self.save(action_id = action)
+                        obs , reward , done , info = self.env.step(action=action)
+                        self.save(obs=obs,reward=reward,done=done,info=info)
+                        path_point.append(self.sim.get_agent_state().position)
+
+            
+            self.save(map=draw_map(self.env , path_point))
+            self.save(path_point=path_point)
+            self.store(level_name , self.env._env.current_episode.scene_id , self.env._env.current_episode)
+                
+    def save(self , **kwargs):
+        for key , value in kwargs.items():
+            self.save_data[key].append(value)
+    def store(self, level , scene , id):
+        os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
+        
+        with open(f"{self.save_data_dir}/{level}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
+            pickle.dump(self.save_data , f)
+        self.save_data = None
+    

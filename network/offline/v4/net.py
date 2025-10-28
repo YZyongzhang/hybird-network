@@ -9,12 +9,10 @@ from network.hybird.foundation_model import Network
 from torch.distributions import Categorical 
 
 class hybrid_LSTM(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size,stack_frames,lstm_out,lstm_layer):
+    def __init__(self, state_size, action_size,lstm_out,lstm_layer):
         super(hybrid_LSTM, self).__init__()
         self.input_shape = state_size
         self.action_size = action_size
-        self.stack_frames = stack_frames
-        self.hybrid = Network()
         self.hybrid_dim = 256
         self.lstm_layer=lstm_layer
         self.lstm_out = lstm_out
@@ -32,29 +30,18 @@ class hybrid_LSTM(nn.Module):
         """
 
         """
-        audio , rgb , depth = input
-        rgb = rgb.permute(0,1 , 4, 2, 3)
-        depth = depth.permute(0,1 , 4, 2, 3)
-
-        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
 
         # if input.shape[1]>1:
-        batch_size = rgb.shape[0]
-        seq_len = rgb.shape[1]
-        rgb = rgb.reshape(-1, input.shape[-3], input.shape[-2], input.shape[-1])
-        depth = depth.reshape(-1, input.shape[-3], input.shape[-2], input.shape[-1])
-        audio = audio.reshape(-1, input.shape[-3], input.shape[-2], input.shape[-1])
+        batch_size = input.shape[0]
+        seq_len = input.shape[1]
 
-        x=self.hybrid(audio , rgb ,depth)
-        x=x.reshape(x.shape[0],-1)
-        x=x.reshape(batch_size,seq_len,-1)
         h0=torch.rand(self.lstm_layer*1,batch_size,self.lstm_out).cuda()
         c0=torch.rand(self.lstm_layer*1,batch_size,self.lstm_out).cuda()
 
         # if self.ht == None or self.ct == None:
         #     x, (ht, ct) = self.lstm(x)
         # else:
-        x, (ht,ct) = self.lstm(x,(h0,c0))
+        x, (ht,ct) = self.lstm(input,(h0,c0))
         # self.ht=ht
         # self.ct=ct
         # x = torch.relu(self.head_1(x))
@@ -63,22 +50,13 @@ class hybrid_LSTM(nn.Module):
         return x
     def inference(self,input,ht=None,ct=None):
         # if input.shape[1]>1:
-        audio , rgb , depth = input
-        rgb = rgb.permute(0,1 , 4, 2, 3)
-        depth = depth.permute(0,1 , 4, 2, 3)
-        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        
 
-        batch_size = input.shape[0]
-        seq_len = input.shape[1]
-        input = input.reshape(-1, input.shape[-3], input.shape[-2], input.shape[-1])
-        x=self.hybrid(audio , rgb ,depth)
-        x = x.reshape(x.shape[0], -1)
-        x = x.reshape(batch_size, seq_len, -1)
         if ht ==None or ct==None:
-            x, (ht, ct) = self.lstm(x)
+            x, (ht, ct) = self.lstm(input)
 
         else:
-            x, (ht, ct) = self.lstm(x,(ht,ct))
+            x, (ht, ct) = self.lstm(input,(ht,ct))
         # x = torch.relu(self.head_1(x))
         # out = torch.relu(self.ff_1(x))
 

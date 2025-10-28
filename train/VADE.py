@@ -292,17 +292,23 @@ class LoadLmdb:
             # 编码整个轨迹
             encoded_states = []
             with torch.no_grad():
-                for v in obs:
+                for  i , v in enumerate(obs):
+                    
                     rgb = torch.from_numpy(v['rgb']).float() / 255.0
                     depth = torch.from_numpy(v['depth']).float()
                     audio = torch.from_numpy(v['spectrogram'][0]).float()
-
+                    if i == 0:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
                     state = model.embedding_forward(
                         audio.to(model.device),
-                        rgb.to(model.device),
-                        depth.to(model.device)
+                        torch.cat([pre_rgb , rgb] , dim = 2).to(model.device),
+                        torch.cat([pre_depth , depth] , dim = 2).to(model.device)
                     )
-                    encoded_states.append(state.cpu())
+
+                    encoded_states.append(state.squeeze(0).cpu()) # 去除batch
+                    pre_rgb = rgb
+                    pre_depth = depth
 
             # 构造时序样本（滑动窗口）
             traj_len = len(encoded_states)
@@ -312,7 +318,6 @@ class LoadLmdb:
                 a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
                 r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
                 d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
-
                 buffer_states.append(state_seq)
                 buffer_next_states.append(next_state_seq)
                 buffer_actions.append(a_seq)
@@ -747,7 +752,7 @@ class ShardedPTDatasetOffline(Dataset):
         super().__init__()
         self.shard_files = []
         for pattern in shard_pattern:
-            self.shard_files.extend(sorted(glob.glob(pattern))[:5])
+            self.shard_files.extend(sorted(glob.glob(pattern)))
         assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
 
         self.preload = preload

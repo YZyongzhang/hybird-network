@@ -32,12 +32,12 @@ class OfflineTrain:
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
                 tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
-            if epoch % 1 == 0 :
+            if epoch % 10 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % 10 == 0:
+            if epoch % 50 == 0:
                 # train_acc = self.val(epoch)
                 self.agent.eval()
-                online_reward  , spl = self.online_test.rollout_two_frame(self.agent ,logger )
+                online_reward  , spl = self.online_test.rollout_lstm(self.agent ,logger )
                 self.agent.train()
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)

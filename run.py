@@ -43,6 +43,14 @@ if __name__ == "__main__":
             model.load_state_dict(torch.load(loadlmdb_config.CKPT))
             model.eval()
             LoadLmdb.load_offline_two_frame(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
+        elif loadlmdb_config.TYPE == "offlinelstm":
+            from network import HybirdNetwork
+            import torch
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = HybirdNetwork().to(device)
+            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.eval()
+            LoadLmdb.load_offline_lstm(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
     
     elif task_config.TRAIN.OPEN:
         train_config = task_config.TRAIN
@@ -109,6 +117,26 @@ if __name__ == "__main__":
                 hidden_dim = offline_config.hidden_dim
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 sac_model = CQLSAC(state_size=state_dim , action_size=action_dim , hidden_size=hidden_dim , device=device)
+                Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
+            elif offline_config.model == 'v4':
+                from network import cql_lstm
+                state_dim = offline_config.state_dim
+                action_dim = offline_config.action_dim
+                hidden_dim = offline_config.hidden_dim
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                sac_model = cql_lstm(
+                    state_size = state_dim,
+                    action_size = action_dim,
+                    tau = offline_config.tau,
+                    hidden_size = hidden_dim,
+                    learning_rate = offline_config.lr,
+                    with_lagrange = False,
+                    target_action_gap = 0, # with_lagrange = false .这个用不到
+                    device = device,
+                    lstm_seq_len = 5,
+                    lstm_layer = 1,
+                    lstm_out = 128,
+                 )
                 Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             
             
