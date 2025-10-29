@@ -35,7 +35,7 @@ TASK:
     DRAW_SHORTEST_PATH: True
     
 COLLECT:
-  OPEN: True
+  OPEN: False
   TYPE: "offlineLevel"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[] , "greedy_action":[]}
   DATA_DIR: "dataset/pickle/v2/offline(level)" #"pickle/greedy"
@@ -44,7 +44,7 @@ COLLECT:
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   EXPERIMENT_LOSS_DIR: "compare/loss/hybirdnetwork_RGBD_two_frame"
@@ -61,9 +61,9 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v4model/3"
-    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v4model/3"
-    train_shard_pattern: ["dataset/offline/pt/v1/lstm(greedy)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v1/lstm(hybird)/offline_rl_lstm_shard_*.pt", "dataset/offline/pt/v1/lstm(random)/offline_rl_lstm_shard_*.pt"]
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v4model/level/test"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v4model/level"
+    train_shard_pattern: ["dataset/offline/pt/v3/level(level1)/offline_rl_lstm_shard_0.pt","dataset/offline/pt/v3/level(level2)/offline_rl_lstm_shard_0.pt", "dataset/offline/pt/v3/level(level3)/offline_rl_lstm_shard_0.pt" , "dataset/offline/pt/v3/level(level4)/offline_rl_lstm_shard_0.pt" , "dataset/offline/pt/v3/level(level5)/offline_rl_lstm_shard_0.pt"]
     # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
    
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
@@ -76,20 +76,20 @@ TRAIN:
     beta: 0.2
     gamma: 0.99
     batch_size: 64
-    num_epochs : 3000
+    num_epochs : 500
 
 LMDB:
   OPEN: False
   TYPE: "offlinelstm"
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(offline_with_RGBD_resacle_reward_two_frame)/random"
-  TO_PATH: "dataset/offline/pt/v1/lstm(random)"
+  RAW_DATA_PATH: "dataset/pickle/v2/offline(level)/level1"
+  TO_PATH: "dataset/offline/pt/v3/level(level1_test)"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_telephone"
+  SPLIT: "val_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
