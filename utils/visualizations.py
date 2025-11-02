@@ -30,21 +30,21 @@ def draw_points_on_map(topdown_map, points=None):
 
     return img
 
-def draw_sound(sim , top_down_map ,point_type):
-    position = sim.get_sound_state()
-    t_x, t_y = maps.to_grid(
-        position[2],
-        position[0],
-        (top_down_map.shape[0], top_down_map.shape[1]),
-        sim=sim,
-    )
-    point_padding = 2 * int(
-            np.ceil(512 / MAP_THICKNESS_SCALAR)
-    )
-    top_down_map[
-        t_x - point_padding : t_x + point_padding + 1,
-        t_y - point_padding : t_y + point_padding + 1,
-    ] = point_type
+def draw_sound(sim , sound_points , top_down_map ,point_type):
+    for position in sound_points:
+        t_x, t_y = maps.to_grid(
+            position[2],
+            position[0],
+            (top_down_map.shape[0], top_down_map.shape[1]),
+            sim=sim,
+        )
+        point_padding = 2 * int(
+                np.ceil(512 / MAP_THICKNESS_SCALAR)
+        )
+        top_down_map[
+            t_x - point_padding : t_x + point_padding + 1,
+            t_y - point_padding : t_y + point_padding + 1,
+        ] = point_type
 
 def draw_agent(
     image: np.ndarray,
@@ -60,7 +60,7 @@ def real_point_to_grid(sim , path_points , top_down_map):
         grid_point.append(maps.to_grid(point[2] , point[0]  , (top_down_map.shape[0] , top_down_map.shape[1]) , sim  , sim.pathfinder))
     return grid_point
 
-def draw_map(env, path_points):
+def draw_map(env, path_points , sound_points):
         import math
         from scipy.spatial.transform import Rotation as R
         sim = env._env._sim
@@ -74,7 +74,7 @@ def draw_map(env, path_points):
         
         # 保证在 0~360 之间
         yaw = (yaw + 360) % 360
-        draw_sound(sim,top_down_map , maps.MAP_VIEW_POINT_INDICATOR)
+        draw_sound(sim , sound_points,top_down_map , maps.MAP_VIEW_POINT_INDICATOR)
         maps.draw_path(top_down_map, path_points)
         top_down_map = maps.draw_agent(
             top_down_map, path_points[-1], yaw, agent_radius_px=8
