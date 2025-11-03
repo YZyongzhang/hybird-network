@@ -50,7 +50,7 @@ _C.EXTRA_RGB = False
 _C.DEBUG = False
 _C.USE_LAST_CKPT = False
 _C.DISPLAY_RESOLUTION = 128
-_C.CONTINUOUS = True
+_C.CONTINUOUS = False
 _C.FOLLOW_SHORTEST_PATH = False
 # -----------------------------------------------------------------------------
 # EVAL CONFIG

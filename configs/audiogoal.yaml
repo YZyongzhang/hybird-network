@@ -12,7 +12,6 @@ SIMULATOR:
     HEIGHT: 128
 
   TYPE: "SoundSpacesSim"
-  # TYPE: "ContinuousSoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"
   SCENE_DATASET: "mp3d"
   GRID_SIZE: 1.0
@@ -38,9 +37,10 @@ TASK:
 COLLECT:
   OPEN: True
   GRID_SIZE: 1.0
-  TYPE: "offlineversion_2.0"
+  TYPE: "offlineversion3"
+  # TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[] , "greedy_action":[] , "total_sound_point":[]}
-  DATA_DIR: "dataset/pickle/v2/offline(version4)" #"pickle/greedy"
+  DATA_DIR: "dataset/pickle/v2/offline(version5)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"

@@ -83,6 +83,7 @@ class GreedyCollect:
             self.save(sound_id = self.env._env.current_episode.info['sound'])
             self.save(obs=obs,action_id=action_id)
             path_point.append(self.sim.get_agent_state().position)
+            import pdb;pdb.set_trace()
             for action in action_id:
                 obs , reward , done , info = self.env.step(action=action)
                 self.save(obs=obs,reward=reward,done=done,info=info)
@@ -90,7 +91,7 @@ class GreedyCollect:
                 if action == action_id[-1]:
                     print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
             
-            self.save(map=draw_map(self.env , path_point))
+            self.save(map=draw_map(self.env , path_point , [self.env._env.current_episode.goals[0].position]))
             self.save(path_point=path_point)
             self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
     def save(self , **kwargs):
@@ -808,19 +809,21 @@ class OfflineVersion3:
                 stop_on_error=True
             ) # 这里的stop_on_error 会出现greedyerror. 如果为false的话。这个看看会有哪一种情况出现这种case
             self.short_path_greedy._build_follower()
-    def mid_sound_point(self , total_sound , finnal_sound , distance ,geodesic_distance, nums):
+    def mid_sound_point(self , total_sound , finnal_sound ,agent_pos, distance ,geodesic_distance , geometry_distance, nums):
         if nums == 0:
             return 1
         
         max_retry = 100
         mid_point = None
-
         for attempt in range(max_retry):
             candidate = self.sim.check_audio_point(self.sim.pathfinder.get_random_navigable_point_near(
                 finnal_sound, distance, max_tries=100
             )).tolist()
-            mid_geodesic_distance = self.sim.geodesic_distance(self.env._env.current_episode.start_position , [candidate])
-            if math.isfinite(mid_geodesic_distance) and mid_geodesic_distance < geodesic_distance: # 不走回头路，确保geodesic大于midgeodesic
+            mid_geodesic_distance = self.sim.geodesic_distance(agent_pos , [candidate])
+            mid_geometry_distance = self.sim.geometry_distance(agent_pos , candidate)
+            # import pdb;pdb.set_trace()
+
+            if math.isfinite(mid_geodesic_distance) and mid_geodesic_distance < geodesic_distance and mid_geometry_distance < geometry_distance: # 不走回头路，确保geodesic大于midgeodesic
                 mid_point = candidate
                 break
             else:
@@ -829,7 +832,7 @@ class OfflineVersion3:
         if mid_point is None:
             mid_point = finnal_sound # 如果都找不到中间点，则放弃。
         
-        self.mid_sound_point(total_sound , mid_point , distance , geodesic_distance , nums - 1)
+        self.mid_sound_point(total_sound , mid_point ,agent_pos , distance , mid_geodesic_distance ,mid_geometry_distance , nums - 1)
         total_sound.append(mid_point) # 保证geodesic较大的最后寻找
     
 
@@ -838,7 +841,6 @@ class OfflineVersion3:
         # path = self.short_path_greedy._follower.find_path(goal_pos)
         self.sim.set_audio_point(goal_pos)
         actions = self.sim.compute_oracle_actions()
-
         return actions
     def remove_same_point(self , total_sound_point):
         seen = set()
@@ -855,22 +857,29 @@ class OfflineVersion3:
         for _ in range(self.env._env.number_of_episodes):
             # 首先实现正常的版本，不分level
             # 1. 获取到原声源位置
-            path_point = []
             self.save_data = copy.deepcopy(self.save_data_struct)
-            finnal_sound_point = self.env._env.current_episode.goals[0].position # 这里进行debug看看属性。可以先跳过
-            geodesic_distance = self.env._env.current_episode.info['geodesic_distance']
-            nums_split = 3
-            total_sound_point = []
-            distance = geodesic_distance / nums_split
-            self.mid_sound_point(total_sound_point , finnal_sound_point , distance , geodesic_distance , 3)
-            total_sound_point.append(finnal_sound_point)
-            total_sound_point = self.remove_same_point(total_sound_point)
             obs = self.env.reset()
             done = False
             self.save(sound_id = self.env._env.current_episode.info['sound'])
             self.save(obs=obs)
+            path_point = []
+            finnal_sound_point = self.env._env.current_episode.goals[0].position # 这里进行debug看看属性。可以先跳过
+            # finnal_sound_point = self.sim.graph.nodes[59]['point']
+            agent_pos = self.env._env.current_episode.start_position
+            # geodesic_distance = self.env._env.current_episode.info['geodesic_distance']
+            geodesic_distance = self.sim.geodesic_distance(agent_pos , [finnal_sound_point])
+            geometry_distance = self.sim.geometry_distance(agent_pos , finnal_sound_point)
+            nums_split = 3
+            total_sound_point = []
+            distance = geodesic_distance / nums_split
+            # distance  = 5
+            self.mid_sound_point(total_sound_point , finnal_sound_point ,agent_pos ,  distance , geodesic_distance ,geometry_distance, 3)
+            total_sound_point.append(finnal_sound_point)
             self.save(total_sound_point = total_sound_point)
+            
+            # total_sound_point = self.remove_same_point(total_sound_point)
             for id , sound_point in enumerate(total_sound_point):
+                # import pdb;pdb.set_trace()
                 actions = self.get_actions(sound_point)
                 for action in actions:
                     if action == 0 and id != len(total_sound_point)-1:
@@ -988,8 +997,8 @@ class OfflineVersionSoundspaces2:
             geodesic_distance = self.env._env.current_episode.info['geodesic_distance']
             nums_split = 3
             total_sound_point = []
-            # distance = geodesic_distance / nums_split
-            distance = 10
+            distance = geodesic_distance / nums_split
+            # distance = 10
             self.mid_sound_point(total_sound_point , finnal_sound_point , distance , geodesic_distance , 3)
             # total_sound_point.append(finnal_sound_point) # 会不会是finnnalpoint有时候sanmple不到地图上
             # total_sound_point = self.remove_same_point(total_sound_point)

@@ -1,11 +1,25 @@
-import pickle , os
-# path = '../dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_collided)/hybird/5q7pvUzZiYa/976.pkl'
-path = './dataset/pickle/v2/offline(level)/level5/PX4nDJXEHrG/6256.pkl'
-with open(path , 'rb') as f:
-    data = pickle.load(f)
-import sys
-sys.path.append("/home/kongxiangyu/yongzhang/finnal_exp")
-from utils.visualizations import plot_top_down_map
+# test the sim navmash point
+from env import Env
+from configs.default import get_config
+import os
+from habitat.utils.visualizations import maps
 from PIL import Image
-Image.fromarray(data['map'][0]).save('./a.png')
-import pdb;pdb.set_trace()
+from soundspaces.utils import load_metadata
+from utils.visualizations import get_topdown_map , draw_sound
+
+config = get_config()
+env = Env(config=config)
+for _ in range(env._env.number_of_episodes):
+    env.reset()
+    sim = env._env.sim
+    top_down_map = get_topdown_map(sim)
+    graphs = sim.graph.nodes()
+    points = []
+    for node_point in graphs:
+        point = graphs[node_point]['point']
+        if sim.pathfinder.is_navigable(point):
+            points.append(point)
+
+    draw_sound(sim , points , top_down_map , maps.MAP_VIEW_POINT_INDICATOR)
+    Image.fromarray(top_down_map).save(f'./scene_nodes/{env._env.current_episode.scene_id[-15:-4]}.png')
+
