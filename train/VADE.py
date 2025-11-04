@@ -327,7 +327,6 @@ class LoadLmdb:
                 # 存 shard
                 if len(buffer_states) >= shard_size:
                     shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
-                    import pdb;pdb.set_trace()
                     torch.save({
                         'states': torch.stack(buffer_states),
                         'next_states': torch.stack(buffer_next_states),
@@ -802,5 +801,4 @@ class ShardedPTDatasetOffline(Dataset):
         done        = data["dones"][local_idx]
         state = state.squeeze(0)
         next_state = next_state.squeeze(0)
-        import pdb;pdb.set_trace()
         return state, next_state , action, reward, done

@@ -1,5 +1,5 @@
 ENVIRONMENT:
-  MAX_EPISODE_STEPS: 100
+  MAX_EPISODE_STEPS: 200
 SIMULATOR:
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
@@ -35,18 +35,18 @@ TASK:
     DRAW_SHORTEST_PATH: True
     
 COLLECT:
-  OPEN: True
+  OPEN: False
   GRID_SIZE: 1.0
-  TYPE: "offlineversion3"
-  # TYPE: "greedy"
+  # TYPE: "offlineversion3"
+  TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[] , "greedy_action":[] , "total_sound_point":[]}
-  DATA_DIR: "dataset/pickle/v2/offline(version5)" #"pickle/greedy"
+  DATA_DIR: "dataset-data3/dataset/pickle/hybird(val_multiple_unheard)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   EXPERIMENT_LOSS_DIR: "compare/loss/hybirdnetwork_RGBD_two_frame"
@@ -63,9 +63,9 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v4model/level/test"
-    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v4model/level"
-    train_shard_pattern: ["dataset/offline/pt/v3/level(level1)/offline_rl_lstm_shard_0.pt","dataset/offline/pt/v3/level(level2)/offline_rl_lstm_shard_0.pt", "dataset/offline/pt/v3/level(level3)/offline_rl_lstm_shard_0.pt" , "dataset/offline/pt/v3/level(level4)/offline_rl_lstm_shard_0.pt" , "dataset/offline/pt/v3/level(level5)/offline_rl_lstm_shard_0.pt"]
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/3"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
+    train_shard_pattern: ["dataset/offline/pt/v4/offline(greedy)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v4/offline(bate_1.5)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v4/offline(bate_2.0)/offline_rl_lstm_shard_*.pt"]
     # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
    
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
@@ -78,20 +78,20 @@ TRAIN:
     beta: 0.2
     gamma: 0.99
     batch_size: 64
-    num_epochs : 500
+    num_epochs : 3000
 
 LMDB:
   OPEN: False
   TYPE: "offlinelstm"
-  RAW_DATA_PATH: "dataset/pickle/v2/offline(level)/level1"
-  TO_PATH: "dataset/offline/pt/v3/level(level1_test)"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_train)"
+  TO_PATH: "dataset/offline/pt/v4/offline(greedy)"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_telephone"
+  SPLIT: "val_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"

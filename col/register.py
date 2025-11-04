@@ -83,7 +83,6 @@ class GreedyCollect:
             self.save(sound_id = self.env._env.current_episode.info['sound'])
             self.save(obs=obs,action_id=action_id)
             path_point.append(self.sim.get_agent_state().position)
-            import pdb;pdb.set_trace()
             for action in action_id:
                 obs , reward , done , info = self.env.step(action=action)
                 self.save(obs=obs,reward=reward,done=done,info=info)
@@ -91,7 +90,7 @@ class GreedyCollect:
                 if action == action_id[-1]:
                     print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
             
-            self.save(map=draw_map(self.env , path_point , [self.env._env.current_episode.goals[0].position]))
+            self.save(map=draw_map(self.env , path_point , self.env._env.current_episode.start_position , [self.env._env.current_episode.goals[0].position]))
             self.save(path_point=path_point)
             self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
     def save(self , **kwargs):
@@ -809,6 +808,8 @@ class OfflineVersion3:
                 stop_on_error=True
             ) # 这里的stop_on_error 会出现greedyerror. 如果为false的话。这个看看会有哪一种情况出现这种case
             self.short_path_greedy._build_follower()
+            self.distance_episilon = 1.5
+
     def mid_sound_point(self , total_sound , finnal_sound ,agent_pos, distance ,geodesic_distance , geometry_distance, nums):
         if nums == 0:
             return 1
@@ -864,20 +865,23 @@ class OfflineVersion3:
             self.save(obs=obs)
             path_point = []
             finnal_sound_point = self.env._env.current_episode.goals[0].position # 这里进行debug看看属性。可以先跳过
-            # finnal_sound_point = self.sim.graph.nodes[59]['point']
             agent_pos = self.env._env.current_episode.start_position
-            # geodesic_distance = self.env._env.current_episode.info['geodesic_distance']
+            agent_rot = self.env._env.current_episode.start_rotation
+            # trojectory = []
+            # for i in range(3):
             geodesic_distance = self.sim.geodesic_distance(agent_pos , [finnal_sound_point])
             geometry_distance = self.sim.geometry_distance(agent_pos , finnal_sound_point)
             nums_split = 3
             total_sound_point = []
-            distance = geodesic_distance / nums_split
-            # distance  = 5
+            distance = self.distance_episilon * (geodesic_distance / nums_split)
             self.mid_sound_point(total_sound_point , finnal_sound_point ,agent_pos ,  distance , geodesic_distance ,geometry_distance, 3)
             total_sound_point.append(finnal_sound_point)
+            # trojectory.append(total_sound_point)
+            
             self.save(total_sound_point = total_sound_point)
             
             # total_sound_point = self.remove_same_point(total_sound_point)
+            # for total_sound_point in trojectory:
             for id , sound_point in enumerate(total_sound_point):
                 # import pdb;pdb.set_trace()
                 actions = self.get_actions(sound_point)
@@ -885,13 +889,16 @@ class OfflineVersion3:
                     if action == 0 and id != len(total_sound_point)-1:
                         # 如果action为0且不是最后一个声源点
                         break
+                    # if action == 0 and id == len(total_sound_point)-1:
+                    #     # 如果action为0且不是最后一个声源点
+                    #     self.sim.set_agent_state(agent_pos , agent_rot)
                     self.save(action_id = action)
                     obs , reward , done , info = self.env.step(action=action)
                     self.save(obs=obs,reward=reward,done=done,info=info)
                     path_point.append(self.sim.get_agent_state().position)
                     if done:
                         break
-            self.save(map=draw_map(self.env , path_point , total_sound_point))
+            self.save(map=draw_map(self.env , path_point , agent_pos , total_sound_point))
             self.save(path_point=path_point)
             self.store('level3' , self.env._env.current_episode.scene_id , self.env._env.current_episode)
     
