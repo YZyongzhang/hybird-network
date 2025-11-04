@@ -752,7 +752,7 @@ class ShardedPTDatasetOffline(Dataset):
         super().__init__()
         self.shard_files = []
         for pattern in shard_pattern:
-            self.shard_files.extend(sorted(glob.glob(pattern)))
+            self.shard_files.extend(random.shuffle((glob.glob(pattern)))[:4])
         assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
 
         self.preload = preload

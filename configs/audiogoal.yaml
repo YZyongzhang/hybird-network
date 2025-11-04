@@ -63,7 +63,7 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/3"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/4"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
     train_shard_pattern: ["dataset/offline/pt/v4/offline(greedy)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v4/offline(bate_1.5)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v4/offline(bate_2.0)/offline_rl_lstm_shard_*.pt"]
     # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
