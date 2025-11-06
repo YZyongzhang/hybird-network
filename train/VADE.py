@@ -257,7 +257,208 @@ class LoadLmdb:
                 'angles':torch.stack(buffer_angles)
             }, f"{config.LMDB.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+    @classmethod
+    def load_offline_lstm_level_audio_visual(cls, path, model, config, seq_len=5):
+        """
+        构建 LSTM 时序输入的 offline 数据。
+        每个样本是一个长度为 seq_len 的序列：
+            - states: [seq_len, feature_dim]
+            - actions: [seq_len]
+            - rewards: [seq_len]
+            - dones: [seq_len]
+        """
 
+        # files = cls.get_files(path=path)
+        with open(path , 'rb') as f:
+            files = pickle.load(f)
+            
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 2000  # 每个shard包含的序列数
+        shard_id = 0
+
+        buffer_audio_states, buffer_visual_audio_states , buffer_next_audio_states ,  buffer_next_visual_audio_states= [], [] , [] , []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading LSTM offline data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist()
+
+            # 编码整个轨迹
+            encoded_audio_states = []
+            encoded_visual_audio_states = []
+            with torch.no_grad():
+                for  i , v in enumerate(obs):
+                    
+                    rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                    depth = torch.from_numpy(v['depth']).float()
+                    audio = torch.from_numpy(v['spectrogram'][0]).float()
+                    if i == 0:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
+                    audio , visual_audio = model.embedding_forward(
+                        audio.to(model.device),
+                        torch.cat([pre_rgb , rgb] , dim = 2).to(model.device),
+                        torch.cat([pre_depth , depth] , dim = 2).to(model.device)
+                    )
+
+                    encoded_audio_states.append(audio.squeeze(0).cpu()) # 去除batch
+                    encoded_visual_audio_states.append(visual_audio.squeeze(0).cpu())
+                    pre_rgb = rgb
+                    pre_depth = depth
+
+            # 构造时序样本（滑动窗口）
+            traj_len = len(encoded_audio_states)
+            for i in range(traj_len - seq_len):
+                state_audio_seq = torch.stack(encoded_audio_states[i:i+seq_len])              # 当前状态序列
+                state_visual_audio_seq = torch.stack(encoded_visual_audio_states[i:i+seq_len])
+                next_state_audio_seq = torch.stack(encoded_audio_states[i+1:i+1+seq_len])    # 下一个状态序列
+                next_state_visual_audio_seq = torch.stack(encoded_visual_audio_states[i+1:i+1+seq_len])
+                a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
+                r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
+                d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
+                buffer_audio_states.append(state_audio_seq)
+                buffer_visual_audio_states.append(state_visual_audio_seq)
+                buffer_next_audio_states.append(next_state_audio_seq)
+                buffer_next_visual_audio_states.append(next_state_visual_audio_seq)
+                buffer_actions.append(a_seq)
+                buffer_rewards.append(r_seq)
+                buffer_dones.append(d_seq)
+
+                # 存 shard
+                if len(buffer_audio_states) >= shard_size:
+                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+                    torch.save({
+                        'states_audio': torch.stack(buffer_audio_states) , 
+                        'states_visual_audio': torch.stack(buffer_visual_audio_states),
+                        'next_states_audio': torch.stack(buffer_next_audio_states),
+                        'next_states_visual_audio': torch.stack(buffer_next_visual_audio_states),
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"保存 shard {shard_id}, size={len(buffer_audio_states)}")
+
+                    buffer_audio_states, buffer_visual_audio_states , buffer_next_audio_states ,  buffer_next_visual_audio_states= [], [] , [] , []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
+                    shard_id += 1
+
+        # 保存最后一批
+        if buffer_audio_states:
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save({
+                'states_audio': torch.stack(buffer_audio_states) , 
+                'states_visual_audio': torch.stack(buffer_visual_audio_states),
+                'next_states_audio': torch.stack(buffer_next_audio_states),
+                'next_states_visual_audio': torch.stack(buffer_next_visual_audio_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"保存 shard {shard_id}, size={len(buffer_audio_states)})")
+    @classmethod
+    def load_offline_lstm_level(cls, path, model, config, seq_len=5):
+        """
+        构建 LSTM 时序输入的 offline 数据。
+        每个样本是一个长度为 seq_len 的序列：
+            - states: [seq_len, feature_dim]
+            - actions: [seq_len]
+            - rewards: [seq_len]
+            - dones: [seq_len]
+        """
+
+        # files = cls.get_files(path=path)
+        with open(path , 'rb') as f:
+            files = pickle.load(f)
+            
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 2000  # 每个shard包含的序列数
+        shard_id = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading LSTM offline data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist()
+
+            # 编码整个轨迹
+            encoded_states = []
+            with torch.no_grad():
+                for  i , v in enumerate(obs):
+                    
+                    rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                    depth = torch.from_numpy(v['depth']).float()
+                    audio = torch.from_numpy(v['spectrogram'][0]).float()
+                    if i == 0:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
+                    state = model.embedding_forward(
+                        audio.to(model.device),
+                        torch.cat([pre_rgb , rgb] , dim = 2).to(model.device),
+                        torch.cat([pre_depth , depth] , dim = 2).to(model.device)
+                    )
+
+                    encoded_states.append(state.squeeze(0).cpu()) # 去除batch
+                    pre_rgb = rgb
+                    pre_depth = depth
+
+            # 构造时序样本（滑动窗口）
+            traj_len = len(encoded_states)
+            for i in range(traj_len - seq_len):
+                state_seq = torch.stack(encoded_states[i:i+seq_len])              # 当前状态序列
+                next_state_seq = torch.stack(encoded_states[i+1:i+1+seq_len])    # 下一个状态序列
+                a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
+                r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
+                d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
+                buffer_states.append(state_seq)
+                buffer_next_states.append(next_state_seq)
+                buffer_actions.append(a_seq)
+                buffer_rewards.append(r_seq)
+                buffer_dones.append(d_seq)
+
+                # 存 shard
+                if len(buffer_states) >= shard_size:
+                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+                    torch.save({
+                        'states': torch.stack(buffer_states),
+                        'next_states': torch.stack(buffer_next_states),
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+
+                    buffer_states, buffer_next_states = [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
+                    shard_id += 1
+
+        # 保存最后一批
+        if buffer_states:
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save({
+                'states': torch.stack(buffer_states),
+                'next_states': torch.stack(buffer_next_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"保存 shard {shard_id}, size={len(buffer_states)})")
     @classmethod
     def load_offline_lstm(cls, path, model, config, seq_len=5):
         """
@@ -744,16 +945,20 @@ class ShardedPTDataset(Dataset):
         return  std_audio, rgb , depth , angle , action
       
 class ShardedPTDatasetOffline(Dataset):
-    def __init__(self, shard_pattern=["./dataset/pt/offline/offline_model_shard_*.pt"], preload=True):
+    def __init__(self, train_json, preload=True):
         """
         shard_pattern: shard 文件路径模式，比如 ./dataset/pt/foundation_model_shard_*.pt
         preload: 是否把所有 shard 一次性加载到内存（大数据集建议 False）
         """
         super().__init__()
         self.shard_files = []
-        for pattern in shard_pattern:
-            self.shard_files.extend(random.shuffle((glob.glob(pattern)))[:4])
-        assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
+        self.get_files(train_json)
+        # for pattern in shard_pattern:
+        #     lists_ = glob.glob(pattern)
+        #     random.shuffle(lists_)
+        #     import pdb;pdb.set_trace()
+        #     self.shard_files.extend(lists_[:40])
+        assert len(self.shard_files) > 0, f"No shards found at {train_json}"
 
         self.preload = preload
         self.shards = []   # 存 torch.load 的结果（如果 preload=True）
@@ -779,6 +984,20 @@ class ShardedPTDatasetOffline(Dataset):
         self.total_size = sum(self.shard_sizes)
         print(f"Total samples: {self.total_size}")
 
+    def get_files(self , train_json):
+        import json
+        with open(train_json , 'r') as f:
+            train_json_data = json.load(f) 
+        path = train_json_data['path']
+        split = train_json_data['split']
+        for beta in path.keys():
+            for distance in path[beta].keys():
+                print(path[beta][distance])
+                lists_1 = glob.glob(path[beta][distance])
+                random.shuffle(lists_1)
+                self.shard_files.extend(lists_1[:split[beta][distance]])
+
+
     def __len__(self):
         return self.total_size
 
@@ -794,11 +1013,24 @@ class ShardedPTDatasetOffline(Dataset):
             data = self.shards[shard_id]
 
         # 取出一个 transition
-        state       = data["states"][local_idx]
-        next_state  = data["next_states"][local_idx]
+        # state       = data["states"][local_idx]
+        # next_state  = data["next_states"][local_idx]
+        # action      = data["actions"][local_idx]
+        # reward      = data["rewards"][local_idx]
+        # done        = data["dones"][local_idx]
+        # state = state.squeeze(0)
+        # next_state = next_state.squeeze(0)
+        # return state, next_state , action, reward, done
+        
+        states_audio = data["states_audio"][local_idx]
+        states_visual_audio = data["states_visual_audio"][local_idx]
+        next_states_audio = data['next_states_audio'][local_idx]
+        next_states_visual_audio = data['next_states_visual_audio'][local_idx]
         action      = data["actions"][local_idx]
         reward      = data["rewards"][local_idx]
         done        = data["dones"][local_idx]
-        state = state.squeeze(0)
-        next_state = next_state.squeeze(0)
-        return state, next_state , action, reward, done
+        states_audio = states_audio.squeeze(0)
+        states_visual_audio = states_visual_audio.squeeze(0)
+        next_states_audio = next_states_audio.squeeze(0)
+        next_states_visual_audio = next_states_visual_audio.squeeze(0)
+        return (states_audio , states_visual_audio), (next_states_audio , next_states_visual_audio) , action, reward, done

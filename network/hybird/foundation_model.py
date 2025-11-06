@@ -237,5 +237,7 @@ class Network(nn.Module):
         p_share_encoder = self.add_position(share_visual_audio_encoder)
         share_encoder = share_visual_audio_encoder + p_share_encoder
         embedding = self.final.fc1(share_encoder)
-        embedding.squeeze(0)
-        return embedding
+        embedding = self.final.fc2[0](embedding)
+        embedding = embedding.squeeze(0)
+        audio_encoder = audio_encoder.squeeze(0)
+        return audio_encoder , embedding
