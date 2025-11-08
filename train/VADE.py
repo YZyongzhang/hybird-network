@@ -303,7 +303,7 @@ class LoadLmdb:
                     if i == 0:
                         pre_rgb = torch.zeros_like(rgb)
                         pre_depth = torch.zeros_like(depth)
-                    audio , visual_audio = model.embedding_forward(
+                    audio , visual_audio = model.embedding_forward_attention(
                         audio.to(model.device),
                         torch.cat([pre_rgb , rgb] , dim = 2).to(model.device),
                         torch.cat([pre_depth , depth] , dim = 2).to(model.device)
@@ -1014,17 +1014,8 @@ class ShardedPTDatasetOffline(Dataset):
         else:
             data = self.shards[shard_id]
 
+
         if self.use_attention:
-            # 取出一个 transition
-            state       = data["states"][local_idx]
-            next_state  = data["next_states"][local_idx]
-            action      = data["actions"][local_idx]
-            reward      = data["rewards"][local_idx]
-            done        = data["dones"][local_idx]
-            state = state.squeeze(0)
-            next_state = next_state.squeeze(0)
-            return state, next_state , action, reward, done
-        else:
             states_audio = data["states_audio"][local_idx]
             states_visual_audio = data["states_visual_audio"][local_idx]
             next_states_audio = data['next_states_audio'][local_idx]
@@ -1037,3 +1028,13 @@ class ShardedPTDatasetOffline(Dataset):
             next_states_audio = next_states_audio.squeeze(0)
             next_states_visual_audio = next_states_visual_audio.squeeze(0)
             return (states_audio , states_visual_audio), (next_states_audio , next_states_visual_audio) , action, reward, done
+        else:
+            # 取出一个 transition
+            state       = data["states"][local_idx]
+            next_state  = data["next_states"][local_idx]
+            action      = data["actions"][local_idx]
+            reward      = data["rewards"][local_idx]
+            done        = data["dones"][local_idx]
+            state = state.squeeze(0)
+            next_state = next_state.squeeze(0)
+            return state, next_state , action, reward, done

@@ -60,13 +60,13 @@ TRAIN:
   val_shard_pattern: ["dataset/hybird/hybird(val_multiple_heard)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
-    model: "v5"
+    model: "v2"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/20"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/22"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
-    train_shard_pattern: "./configs/level/train_2.json"
+    train_shard_pattern: "./dataset/offline/pt/v7/train.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4

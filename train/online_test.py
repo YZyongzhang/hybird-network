@@ -284,11 +284,11 @@ class OnlineTest:
 
     def rollout(self , epoch , sac_model , logger):
         if self.config.model == "v1":
-            self.rollout_1(epoch , sac_model , logger)
+            return self.rollout_1(epoch , sac_model , logger)
         elif self.config.model == 'v2':
-            self.rollout_two_frame(epoch , sac_model , logger)
+            return self.rollout_two_frame(epoch , sac_model , logger)
         elif self.config.model == 'v4':
-            self.rollout_lstm(epoch , sac_model , logger)
+            return self.rollout_lstm(epoch , sac_model , logger)
         elif self.config.model == 'v5':
-            self.rollout_lstm_attention(epoch , sac_model , logger)
+            return self.rollout_lstm_attention(epoch , sac_model , logger)
     

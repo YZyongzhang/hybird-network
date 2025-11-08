@@ -13,7 +13,10 @@ def Train(model ,trainer , config , device = None , **kwargs):
         os.makedirs(save_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=config.EXPERIMENT_LOSS_DIR)
         
-        train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
+        if config.model == "v5":
+            train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern , attention= True)
+        else:
+            train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
         print(train_dataset.__len__())
         import pdb;pdb.set_trace()
         train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True ,  pin_memory=True)

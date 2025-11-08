@@ -2,8 +2,9 @@ import logging
 logger = logging.getLogger("train")
 logger.setLevel(logging.INFO)
 
+log_name = input("please input log name : ")
 # 创建文件 handler
-file_handler = logging.FileHandler("log_1.txt", mode="w", encoding="utf-8")
+file_handler = logging.FileHandler(f"log_{log_name}.txt", mode="w", encoding="utf-8")
 file_handler.setLevel(logging.INFO)
 
 # 设置日志格式
