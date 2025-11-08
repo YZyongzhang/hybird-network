@@ -40,13 +40,13 @@ COLLECT:
   # TYPE: "offlineversion3"
   TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[] , "greedy_action":[] , "total_sound_point":[]}
-  DATA_DIR: "dataset-data3/dataset/pickle/hybird(val_multiple)" #"pickle/greedy"
+  DATA_DIR: "dataset-data3/dataset/pickle/online_val(val)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   # TYPE: "HybirdNetworkAudio"
@@ -64,35 +64,37 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/10"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/20"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
     # train_shard_pattern: ["dataset/offline/pt/v5/offline(distance_15)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v5/offline(distance_30)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v5/offline(distance_70)/offline_rl_lstm_shard_*.pt"]
     # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
-    train_shard_pattern: "./configs/level/train.json"
+    # train_shard_pattern: ["dataset/offline/pt/v2/two_frame(greedy)/offline_rl_shard_*.pt"]
+    train_shard_pattern: "./configs/level/train_2.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
-    lr: 0.0004
+    lr: 0.00004
     target_entropy: -4
     tau: 0.005
     beta: 0.2
     gamma: 0.99
-    batch_size: 64
+    batch_size: 1024
     num_epochs : 300
 
 LMDB:
-  OPEN: True
-  TYPE: "offlinelstm_by_level"
-  RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
-  TO_PATH: "dataset/offline/pt/v5/greedy/offline(distance_70_test)"
+  OPEN: False
+  TYPE: "offlinetwoframe"
+  # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_train)"
+  TO_PATH: "dataset/offline/pt/v7/two_frame_greedy/offline"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_telephone"
+  SPLIT: "train_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"

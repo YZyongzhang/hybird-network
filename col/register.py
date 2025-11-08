@@ -2,6 +2,7 @@
 REGISTER
 """
 import torch
+from PIL import Image
 from habitat import Config
 from ss_baselines.common.environments import AudioNavRLEnv
 from habitat.tasks.nav.shortest_path_follower import ShortestPathFollower
@@ -11,6 +12,7 @@ import pickle , copy , os ,random
 import numpy as np
 import habitat_sim
 import math
+from utils.visualizations import plot_top_down_map , draw_point
 class REGISTER:
     def __init__(self):
         self._registry = {}
@@ -88,6 +90,11 @@ class GreedyCollect:
                 self.save(obs=obs,reward=reward,done=done,info=info)
                 path_point.append(self.sim.get_agent_state().position)
                 if action == action_id[-1]:
+                    top_down_map = plot_top_down_map(info)
+                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
+                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
+                    os.makedirs(f"./online_img/" , exist_ok=True)
+                    Image.fromarray(top_down_map).save(f"./online_img/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
                     print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
             
             self.save(map=draw_map(self.env , path_point , self.env._env.current_episode.start_position , [self.env._env.current_episode.goals[0].position]))

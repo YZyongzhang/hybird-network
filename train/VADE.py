@@ -995,7 +995,8 @@ class ShardedPTDatasetOffline(Dataset):
                 print(path[beta][distance])
                 lists_1 = glob.glob(path[beta][distance])
                 random.shuffle(lists_1)
-                self.shard_files.extend(lists_1[:split[beta][distance]])
+                # self.shard_files.extend(lists_1[:split[beta][distance]])
+                self.shard_files.extend(lists_1)
 
 
     def __len__(self):
@@ -1021,7 +1022,7 @@ class ShardedPTDatasetOffline(Dataset):
         # state = state.squeeze(0)
         # next_state = next_state.squeeze(0)
         # return state, next_state , action, reward, done
-        
+
         states_audio = data["states_audio"][local_idx]
         states_visual_audio = data["states_visual_audio"][local_idx]
         next_states_audio = data['next_states_audio'][local_idx]

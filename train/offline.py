@@ -37,7 +37,7 @@ class OfflineTrain:
             if epoch % 10 == 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
                 # train_acc = self.val(epoch)
                 self.agent.eval()
-                online_reward  , spl = self.online_test.rollout_lstm(self.agent ,logger )
+                online_reward  , spl = self.online_test.rollout_lstm_attention(epoch , self.agent ,logger )
                 self.agent.train()
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)

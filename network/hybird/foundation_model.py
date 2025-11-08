@@ -241,3 +241,4 @@ class Network(nn.Module):
         embedding = embedding.squeeze(0)
         audio_encoder = audio_encoder.squeeze(0)
         return audio_encoder , embedding
+        # return embedding

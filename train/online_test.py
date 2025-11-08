@@ -1,11 +1,13 @@
 import copy
 import torch
+from utils.visualizations import draw_sound , plot_top_down_map , draw_point
+from habitat.utils.visualizations import maps
 from tqdm import tqdm
 import pickle
 import os
 from PIL import Image
 class OnlineTest:
-    def __init__(self , env , hybirdmodel):
+    def __init__(self , env , hybirdmodel ):
         self.env = env
         self.sim = env._env._sim
         self.hybirdmodel = hybirdmodel
@@ -187,6 +189,91 @@ class OnlineTest:
                 epsiode_reward +=reward
                 if done or step >= 100:
                     logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
+                    break
+            total_reward +=  epsiode_reward
+            spl += info['spl']
+            
+        return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
+    def rollout_lstm_attention(self , epoch , sac_model , logger):
+        """
+        twoframe + lstm
+        """
+
+        total_reward = 0
+        spl = 0
+        
+        for _ in tqdm(range(self.env._env.number_of_episodes),desc="onlinetest"):
+            obs = self.env.reset()
+
+            scene = self.env._env.current_episode.scene_id[-15:-4] 
+            episode_id = self.env._env.current_episode.episode_id
+            path = f"img/{scene}_{episode_id}"
+            os.makedirs(path , exist_ok=True)
+            
+            logger.info(f"{epoch} , scene is {scene}  , episodeid is {episode_id}")
+            epsiode_reward = 0            
+            done = False
+            step = 0
+            ht_audio = None
+            ct_audio = None
+            ht_visual_audio = None
+            ct_visual_audio = None
+            with torch.no_grad():
+                Image.fromarray(obs['rgb']).save(f"{path}/{step}.png")
+                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                depth = torch.from_numpy(obs['depth']).float()
+                audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                pre_rgb = torch.zeros_like(rgb)
+                pre_depth = torch.zeros_like(depth)
+                trgb = torch.cat([pre_rgb , rgb] , dim=2)
+                tdepth = torch.cat([pre_depth , depth] , dim=2)
+                # 获取hybrid model的输出
+                audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward(audio.to('cuda') , trgb.to('cuda') , tdepth.to('cuda'))
+                action_hybird = self.hybirdmodel(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
+                action_hybird = action_hybird.argmax(dim=1).item()
+                # 获取offlineRL 的输出
+                visual_audio_encoder = visual_audio_encoder.unsqueeze(0)
+                # import pdb;pdb.set_trace()
+                audio_state, ht_audio, ct_audio = sac_model.hybrid_LSTM.inference(audio_encoder.unsqueeze(0), ht_audio, ct_audio) # state batch ， time ， 256
+                visual_audio_state, ht_visual_audio, ct_visual_audio = sac_model.hybrid_LSTM.inference(visual_audio_encoder.unsqueeze(0), ht_visual_audio, ct_visual_audio) # state batch ， time ， 256
+                state = sac_model.attention(audio_state , visual_audio_state)
+
+                action_sac = sac_model.get_action(state.to('cuda'), eval=True).item()
+                
+                pre_rgb = rgb
+                pre_depth = depth
+            while not done or step < 100:
+                obs , reward , done , info = self.env.step(action=action_sac)
+                logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
+                
+                with torch.no_grad():
+                    Image.fromarray(obs['rgb']).save(f"{path}/{step}.png")
+                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                    depth = torch.from_numpy(obs['depth']).float()
+                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                    trgb = torch.cat([pre_rgb , rgb] , dim=2)
+                    tdepth = torch.cat([pre_depth , depth] , dim=2)
+                    audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
+                    visual_audio_encoder = visual_audio_encoder.unsqueeze(0)
+                    action_hybird = self.hybirdmodel(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
+                    action_hybird = action_hybird.argmax(dim=1).item()
+
+                    audio_state, ht_audio, ct_audio = sac_model.hybrid_LSTM.inference(audio_encoder.unsqueeze(0), ht_audio, ct_audio) # state batch ， time ， 256
+                    visual_audio_state, ht_visual_audio, ct_visual_audio = sac_model.hybrid_LSTM.inference(visual_audio_encoder.unsqueeze(0), ht_visual_audio, ct_visual_audio) # state batch ， time ， 256
+                    state = sac_model.attention(audio_state , visual_audio_state)
+                    action_sac = sac_model.get_action(state.to('cuda') , eval=True).item()
+                    
+                    pre_rgb = rgb
+                    pre_depth = depth
+                step +=1
+                epsiode_reward +=reward
+                if done or step >= 100:
+                    logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
+                    top_down_map = plot_top_down_map(info)
+                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
+                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
+                    os.makedirs(f"./online_img/{epoch}" , exist_ok=True)
+                    Image.fromarray(top_down_map).save(f"./online_img/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
                     break
             total_reward +=  epsiode_reward
             spl += info['spl']

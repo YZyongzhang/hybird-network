@@ -69,23 +69,23 @@ class CQLSAC_hybrid_LSTM(nn.Module):
         self.hybrid_LSTM_optimizer = optim.Adam(self.hybrid_LSTM.parameters(), lr=learning_rate)
         
         self.attention = Attention(
-            input_dim = 2 * lstm_out
+            input_dim = lstm_out
         ).to(self.device)
         self.attention_optimizer = optim.Adam(self.attention.parameters(), lr=learning_rate)
 
         # Actor Network
-        self.actor_local = Actor(self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
+        self.actor_local = Actor(2 * self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=learning_rate)
 
         # Critic Network (w/ Target Network)
-        self.critic1 = Critic(self.hybrid_LSTM.outdim, action_size, hidden_size, 2).to(device)
-        self.critic2 = Critic(self.hybrid_LSTM.outdim, action_size, hidden_size, 1).to(device)
+        self.critic1 = Critic(2 * self.hybrid_LSTM.outdim, action_size, hidden_size, 2).to(device)
+        self.critic2 = Critic(2 * self.hybrid_LSTM.outdim, action_size, hidden_size, 1).to(device)
 
         assert self.critic1.parameters() != self.critic2.parameters()
-        self.critic1_target = Critic(self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
+        self.critic1_target = Critic(2 * self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
         self.critic1_target.load_state_dict(self.critic1.state_dict())
 
-        self.critic2_target = Critic(self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
+        self.critic2_target = Critic(2 * self.hybrid_LSTM.outdim, action_size, hidden_size).to(device)
         self.critic2_target.load_state_dict(self.critic2.state_dict())
 
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=learning_rate)

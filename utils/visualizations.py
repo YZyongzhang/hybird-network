@@ -29,6 +29,20 @@ def draw_points_on_map(topdown_map, points=None):
             cv2.circle(img, tuple(np.array(pt, dtype=np.int32)), radius=5, color=(255, 0, 0), thickness=-1)  # 红色填充点
 
     return img
+def draw_point(sim , position , top_down_map):
+    t_x, t_y = maps.to_grid(
+        position[2],
+        position[0],
+        (top_down_map.shape[0], top_down_map.shape[1]),
+        sim=sim,
+    )
+    point_padding = 2 * int(
+            np.ceil(512 / MAP_THICKNESS_SCALAR)
+    )
+    top_down_map[
+        t_x - point_padding : t_x + point_padding + 1,
+        t_y - point_padding : t_y + point_padding + 1,
+    ] = (255, 0, 0)
 
 def draw_sound(sim , agent_pos , sound_points , top_down_map ,point_type):
     for index , position in enumerate(sound_points):
@@ -41,7 +55,7 @@ def draw_sound(sim , agent_pos , sound_points , top_down_map ,point_type):
         point_padding = 2 * int(
                 np.ceil(512 / MAP_THICKNESS_SCALAR)
         )
-        if index == 0:
+        if index == 100:
             top_down_map[
                 t_x - point_padding : t_x + point_padding + 1,
                 t_y - point_padding : t_y + point_padding + 1,
@@ -61,9 +75,6 @@ def draw_sound(sim , agent_pos , sound_points , top_down_map ,point_type):
             agent_pos[0],
             (top_down_map.shape[0], top_down_map.shape[1]),
             sim=sim,
-        )
-    point_padding = 2 * int(
-                np.ceil(512 / MAP_THICKNESS_SCALAR)
         )
 
     top_down_map[

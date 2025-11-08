@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 from network.hybird.foundation_model import Network
 from torch.distributions import Categorical 
-
+import math
 class Attention(nn.Module):
     def __init__(self  , input_dim):
         super().__init__()
@@ -15,8 +15,10 @@ class Attention(nn.Module):
         self.k = nn.Linear(self.input_dim , self.input_dim)
         self.q = nn.Linear(self.input_dim , self.input_dim)
         self.v = nn.Linear(self.input_dim , self.input_dim)
+        self.scale = 1.0 / math.sqrt(input_dim)
+
     def forward(self , audio_token , visual_audio_token):
-        import pdb;pdb.set_trace()
+
         assert len(audio_token.shape) == 3 # batch , seq, embedding
         assert len(visual_audio_token.shape)  == 3 
         b , t , d = audio_token.shape
@@ -39,7 +41,7 @@ class hybrid_LSTM(nn.Module):
         super(hybrid_LSTM, self).__init__()
         self.input_shape = state_size
         self.action_size = action_size
-        self.hybrid_dim = 256
+        self.hybrid_dim = 128
         self.lstm_layer=lstm_layer
         self.lstm_out = lstm_out
         # self.outdim = layer_size
