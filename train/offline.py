@@ -9,7 +9,7 @@ import os
 from tqdm import tqdm
 from utils.log import logger
 class OfflineTrain:
-    def __init__(self, dataloader , sac_model, writer , online_test , batch_size, epoch , save_dir ,  device='cuda'):
+    def __init__(self, dataloader , sac_model, writer , online_test ,online_test_epoch ,  batch_size, epoch , save_dir ,  device='cuda'):
         self.device = device
         self.agent = sac_model
         self.batch_size = batch_size
@@ -17,6 +17,7 @@ class OfflineTrain:
         self.writer = writer
         self.epoch = epoch
         self.online_test = online_test
+        self.online_test_epoch = online_test_epoch
         self.save_dir = save_dir
     def train(self):
         
@@ -34,10 +35,10 @@ class OfflineTrain:
                 tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
             if epoch % 10 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % 10 == 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
+            if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
                 # train_acc = self.val(epoch)
                 self.agent.eval()
-                online_reward  , spl = self.online_test.rollout_lstm_attention(epoch , self.agent ,logger )
+                online_reward  , spl = self.online_test.rollout(epoch , self.agent ,logger )
                 self.agent.train()
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)

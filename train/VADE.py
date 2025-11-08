@@ -945,13 +945,14 @@ class ShardedPTDataset(Dataset):
         return  std_audio, rgb , depth , angle , action
       
 class ShardedPTDatasetOffline(Dataset):
-    def __init__(self, train_json, preload=True):
+    def __init__(self, train_json,  attention = False , preload=True):
         """
         shard_pattern: shard 文件路径模式，比如 ./dataset/pt/foundation_model_shard_*.pt
         preload: 是否把所有 shard 一次性加载到内存（大数据集建议 False）
         """
         super().__init__()
         self.shard_files = []
+        self.use_attention = attention
         self.get_files(train_json)
         # for pattern in shard_pattern:
         #     lists_ = glob.glob(pattern)
@@ -1013,25 +1014,26 @@ class ShardedPTDatasetOffline(Dataset):
         else:
             data = self.shards[shard_id]
 
-        # 取出一个 transition
-        # state       = data["states"][local_idx]
-        # next_state  = data["next_states"][local_idx]
-        # action      = data["actions"][local_idx]
-        # reward      = data["rewards"][local_idx]
-        # done        = data["dones"][local_idx]
-        # state = state.squeeze(0)
-        # next_state = next_state.squeeze(0)
-        # return state, next_state , action, reward, done
-
-        states_audio = data["states_audio"][local_idx]
-        states_visual_audio = data["states_visual_audio"][local_idx]
-        next_states_audio = data['next_states_audio'][local_idx]
-        next_states_visual_audio = data['next_states_visual_audio'][local_idx]
-        action      = data["actions"][local_idx]
-        reward      = data["rewards"][local_idx]
-        done        = data["dones"][local_idx]
-        states_audio = states_audio.squeeze(0)
-        states_visual_audio = states_visual_audio.squeeze(0)
-        next_states_audio = next_states_audio.squeeze(0)
-        next_states_visual_audio = next_states_visual_audio.squeeze(0)
-        return (states_audio , states_visual_audio), (next_states_audio , next_states_visual_audio) , action, reward, done
+        if self.use_attention:
+            # 取出一个 transition
+            state       = data["states"][local_idx]
+            next_state  = data["next_states"][local_idx]
+            action      = data["actions"][local_idx]
+            reward      = data["rewards"][local_idx]
+            done        = data["dones"][local_idx]
+            state = state.squeeze(0)
+            next_state = next_state.squeeze(0)
+            return state, next_state , action, reward, done
+        else:
+            states_audio = data["states_audio"][local_idx]
+            states_visual_audio = data["states_visual_audio"][local_idx]
+            next_states_audio = data['next_states_audio'][local_idx]
+            next_states_visual_audio = data['next_states_visual_audio'][local_idx]
+            action      = data["actions"][local_idx]
+            reward      = data["rewards"][local_idx]
+            done        = data["dones"][local_idx]
+            states_audio = states_audio.squeeze(0)
+            states_visual_audio = states_visual_audio.squeeze(0)
+            next_states_audio = next_states_audio.squeeze(0)
+            next_states_visual_audio = next_states_visual_audio.squeeze(0)
+            return (states_audio , states_visual_audio), (next_states_audio , next_states_visual_audio) , action, reward, done

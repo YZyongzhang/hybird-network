@@ -28,6 +28,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
             device=device,
             writer=writer,
             online_test = online_test,
+            online_test_epoch = config.online_test_epoch,
             batch_size = config.batch_size,
             epoch = config.num_epochs,
             save_dir = save_dir

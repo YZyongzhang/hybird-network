@@ -7,12 +7,13 @@ import pickle
 import os
 from PIL import Image
 class OnlineTest:
-    def __init__(self , env , hybirdmodel ):
+    def __init__(self , env , hybirdmodel , config ):
         self.env = env
         self.sim = env._env._sim
         self.hybirdmodel = hybirdmodel
+        self.config = config
         
-    def rollout(self , sac_model , logger):
+    def rollout_1(self ,epoch ,  sac_model , logger):
         total_reward = 0
         spl = 0
         
@@ -68,7 +69,7 @@ class OnlineTest:
             spl += info['spl']
             
         return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
-    def rollout_two_frame(self , sac_model , logger):
+    def rollout_two_frame(self , epoch , sac_model , logger):
         total_reward = 0
         spl = 0
         
@@ -124,7 +125,7 @@ class OnlineTest:
             spl += info['spl']
             
         return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
-    def rollout_lstm(self , sac_model , logger):
+    def rollout_lstm(self , epoch , sac_model , logger):
         """
         twoframe + lstm
         """
@@ -228,7 +229,7 @@ class OnlineTest:
                 trgb = torch.cat([pre_rgb , rgb] , dim=2)
                 tdepth = torch.cat([pre_depth , depth] , dim=2)
                 # 获取hybrid model的输出
-                audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward(audio.to('cuda') , trgb.to('cuda') , tdepth.to('cuda'))
+                audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward_attention(audio.to('cuda') , trgb.to('cuda') , tdepth.to('cuda'))
                 action_hybird = self.hybirdmodel(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
                 action_hybird = action_hybird.argmax(dim=1).item()
                 # 获取offlineRL 的输出
@@ -253,7 +254,7 @@ class OnlineTest:
                     audio = torch.from_numpy(obs['spectrogram'][0]).float()
                     trgb = torch.cat([pre_rgb , rgb] , dim=2)
                     tdepth = torch.cat([pre_depth , depth] , dim=2)
-                    audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
+                    audio_encoder , visual_audio_encoder = self.hybirdmodel.embedding_forward_attention(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
                     visual_audio_encoder = visual_audio_encoder.unsqueeze(0)
                     action_hybird = self.hybirdmodel(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
                     action_hybird = action_hybird.argmax(dim=1).item()
@@ -279,4 +280,15 @@ class OnlineTest:
             spl += info['spl']
             
         return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
+    
+
+    def rollout(self , epoch , sac_model , logger):
+        if self.config.model == "v1":
+            self.rollout_1(epoch , sac_model , logger)
+        elif self.config.model == 'v2':
+            self.rollout_two_frame(epoch , sac_model , logger)
+        elif self.config.model == 'v4':
+            self.rollout_lstm(epoch , sac_model , logger)
+        elif self.config.model == 'v5':
+            self.rollout_lstm_attention(epoch , sac_model , logger)
     

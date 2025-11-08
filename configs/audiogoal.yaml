@@ -66,9 +66,6 @@ TRAIN:
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
     EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/20"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
-    # train_shard_pattern: ["dataset/offline/pt/v5/offline(distance_15)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v5/offline(distance_30)/offline_rl_lstm_shard_*.pt","dataset/offline/pt/v5/offline(distance_70)/offline_rl_lstm_shard_*.pt"]
-    # ONLINE_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
-    # train_shard_pattern: ["dataset/offline/pt/v2/two_frame(greedy)/offline_rl_shard_*.pt"]
     train_shard_pattern: "./configs/level/train_2.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
@@ -81,6 +78,7 @@ TRAIN:
     gamma: 0.99
     batch_size: 1024
     num_epochs : 300
+    online_test_epoch : 10
 
 LMDB:
   OPEN: False

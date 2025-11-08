@@ -95,11 +95,11 @@ if __name__ == "__main__":
             model.load_state_dict(torch.load(offline_config.ONLINE_CKPT))
             model.eval()
             
-            online_test = OnlineTest(env=env , hybirdmodel=model)
+            
             
             if offline_config.model == "v1":
                 from network import SAC_model
-
+                online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)
                 state_dim = offline_config.state_dim
                 action_dim = offline_config.action_dim
                 hidden_dim = offline_config.hidden_dim
@@ -128,6 +128,7 @@ if __name__ == "__main__":
                 Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             elif offline_config.model == 'v2':
                 from network import CQLSAC
+                online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)
                 state_dim = offline_config.state_dim
                 action_dim = offline_config.action_dim
                 hidden_dim = offline_config.hidden_dim
@@ -136,6 +137,7 @@ if __name__ == "__main__":
                 Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             elif offline_config.model == 'v4':
                 from network import cql_lstm
+                online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)
                 state_dim = offline_config.state_dim
                 action_dim = offline_config.action_dim
                 hidden_dim = offline_config.hidden_dim
@@ -156,6 +158,7 @@ if __name__ == "__main__":
                 Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             elif offline_config.model == 'v5':
                 from network import cql_lstm_attention
+                online_test = OnlineTest(env=env , hybirdmodel=model , config= offline_config)
                 state_dim = offline_config.state_dim
                 action_dim = offline_config.action_dim
                 hidden_dim = offline_config.hidden_dim
