@@ -2,7 +2,6 @@ from env import Env
 from configs.default import get_config
 from utils.log import logger
 config = get_config()
-
 if __name__ == "__main__":
     task_config = config.TASK_CONFIG
     
@@ -11,6 +10,8 @@ if __name__ == "__main__":
         from run import Collect
         import torch
         from network import HybirdNetwork
+        logger.info(task_config.COLLECT) # 将config 保存，方便之后查看训练配置
+
         env = Env(config=config)
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = HybirdNetwork().to(device)
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     elif task_config.LMDB.OPEN :
         loadlmdb_config = task_config.LMDB
         from train import LoadLmdb
+        logger.info(loadlmdb_config)
         if loadlmdb_config.TYPE == "HybirdNetwork":
             LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
         elif loadlmdb_config.TYPE == "HybirdNetworkTwoFrame":
@@ -71,6 +73,7 @@ if __name__ == "__main__":
     elif task_config.TRAIN.OPEN:
         train_config = task_config.TRAIN
         offline_config  = train_config.OFFLINE
+        logger.info(train_config)
         if train_config.TYPE == "HybirdNetworkAudio":
             from network import AudioCRNN
             from run import Train

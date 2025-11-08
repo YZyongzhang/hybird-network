@@ -60,13 +60,13 @@ TRAIN:
   val_shard_pattern: ["dataset/hybird/hybird(val_multiple_heard)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
-    model: "v2"
+    model: "v1"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/22"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/41"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
-    train_shard_pattern: "./dataset/offline/pt/v7/train.json"
+    train_shard_pattern: "./dataset/offline/pt/v2/train.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
@@ -77,22 +77,22 @@ TRAIN:
     beta: 0.2
     gamma: 0.99
     batch_size: 1024
-    num_epochs : 300
-    online_test_epoch : 10
+    num_epochs : 20
+    online_test_epoch : 1
 
 LMDB:
   OPEN: False
   TYPE: "offlinetwoframe"
   # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
-  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_train)"
-  TO_PATH: "dataset/offline/pt/v7/two_frame_greedy/offline"
+  RAW_DATA_PATH: "dataset/pickle/v2/offline(version_final_2.0)/level3/"
+  TO_PATH: "dataset/offline/pt/v7/two_frame_2.0/offline"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_telephone"
+  SPLIT: "val_telephone"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"

@@ -85,7 +85,6 @@ class OnlineTest:
             done = False
             step = 0
             with torch.no_grad():
-                Image.fromarray(obs['rgb']).save(f"{path}/{step}.png")
                 rgb = torch.from_numpy(obs['rgb']).float() / 255.0
                 depth = torch.from_numpy(obs['depth']).float()
                 audio = torch.from_numpy(obs['spectrogram'][0]).float()
@@ -104,7 +103,6 @@ class OnlineTest:
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
                 with torch.no_grad():
-                    Image.fromarray(obs['rgb']).save(f"{path}/{step}.png")
                     rgb = torch.from_numpy(obs['rgb']).float() / 255.0
                     depth = torch.from_numpy(obs['depth']).float()
                     audio = torch.from_numpy(obs['spectrogram'][0]).float()
@@ -270,11 +268,11 @@ class OnlineTest:
                 epsiode_reward +=reward
                 if done or step >= 100:
                     logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
-                    top_down_map = plot_top_down_map(info)
-                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
-                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
-                    os.makedirs(f"./online_img/{epoch}" , exist_ok=True)
-                    Image.fromarray(top_down_map).save(f"./online_img/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
+                    # top_down_map = plot_top_down_map(info)
+                    # draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
+                    # draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
+                    # os.makedirs(f"./online_img/{epoch}" , exist_ok=True)
+                    # Image.fromarray(top_down_map).save(f"./online_img/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
                     break
             total_reward +=  epsiode_reward
             spl += info['spl']
@@ -284,7 +282,7 @@ class OnlineTest:
 
     def rollout(self , epoch , sac_model , logger):
         if self.config.model == "v1":
-            return self.rollout_1(epoch , sac_model , logger)
+            return self.rollout_two_frame(epoch , sac_model , logger)
         elif self.config.model == 'v2':
             return self.rollout_two_frame(epoch , sac_model , logger)
         elif self.config.model == 'v4':

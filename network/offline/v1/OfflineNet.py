@@ -15,8 +15,11 @@ class PolicyNet(torch.nn.Module):
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
+        if len(x.shape) < 2: # batch , dim
+            x = x.unsqueeze(0)
         x = F.relu(self.fc1(x))
-        return F.softmax(self.fc2(x), dim=1)
+        x = self.fc2(x)
+        return F.softmax(x, dim=1)
 
 
 class QValueNet(torch.nn.Module):
@@ -84,7 +87,6 @@ class SAC_model(torch.nn.Module):
                                dim=1,
                                keepdim=True)
         next_value = min_qvalue + self.log_alpha.exp() * entropy
-        import pdb;pdb.set_trace()
         td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
@@ -161,6 +163,8 @@ class SAC_model(torch.nn.Module):
         return {
             'critic1_loss': critic_1_loss.item(),
             'critic2_loss': critic_2_loss.item(),
+            'cql1_scaled_loss': cql1_scaled_loss.item(),
+            'cql2_scaled_loss': cql2_scaled_loss.item(),
             'actor_loss': actor_loss.item(),
             'alpha_loss': alpha_loss.item(),
             'cql_1_loss': cql_1_loss.item(),
