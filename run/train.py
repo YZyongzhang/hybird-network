@@ -1,5 +1,5 @@
 from train import VADE
-from train import ShardedPTDataset , ShardedPTDatasetOffline
+from train import ShardedPTDataset , ShardedPTDatasetOffline ,ShardedPTDatasetOfflineBuffer
 import torch
 import torch.optim as optim
 import torch
@@ -14,9 +14,13 @@ def Train(model ,trainer , config , device = None , **kwargs):
         writer = SummaryWriter(log_dir=config.EXPERIMENT_LOSS_DIR)
         
         if config.model == "v5":
+            assert not config.buffer
             train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern , attention= True)
         else:
-            train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
+            if config.buffer:
+                train_dataset = ShardedPTDatasetOfflineBuffer(train_json=config.train_shard_pattern)
+            else:
+                train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
         print(train_dataset.__len__())
         import pdb;pdb.set_trace()
         train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True ,  pin_memory=True)
@@ -26,6 +30,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
                 
         online_test = kwargs['online_test']
         trainer = trainer(
+            dataset = train_dataset,
             dataloader = train_loader , 
             sac_model=model,
             device=device,
@@ -34,7 +39,8 @@ def Train(model ,trainer , config , device = None , **kwargs):
             online_test_epoch = config.online_test_epoch,
             batch_size = config.batch_size,
             epoch = config.num_epochs,
-            save_dir = save_dir
+            save_dir = save_dir,
+            config = config
         )
         trainer.train()
         

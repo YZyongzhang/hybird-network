@@ -88,7 +88,7 @@ if __name__ == "__main__":
             Train(model=model , trainer=HybirdNetworkTrain , config=train_config)
         elif train_config.TYPE == "OfflineRL":
             from run import Train
-            from train import OfflineTrain
+            from train import OfflineTrainBuffer , OfflineTrain
             from train import OnlineTest
             from network import HybirdNetwork
             import torch
@@ -128,7 +128,10 @@ if __name__ == "__main__":
                 if offline_config.LOAD_PATH:
                     sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH))
                     sac_model.train()
-                Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
+                if offline_config.buffer:
+                    Train(model=sac_model , trainer=OfflineTrainBuffer  , config= offline_config , online_test = online_test )
+                else:
+                    Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             elif offline_config.model == 'v2':
                 from network import CQLSAC
                 online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)
@@ -136,8 +139,11 @@ if __name__ == "__main__":
                 action_dim = offline_config.action_dim
                 hidden_dim = offline_config.hidden_dim
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                sac_model = CQLSAC(state_size=state_dim , action_size=action_dim , hidden_size=hidden_dim , device=device)
-                Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
+                sac_model = CQLSAC(state_size=state_dim , action_size=action_dim , hidden_size=hidden_dim , beta= offline_config.beta , device=device)
+                if offline_config.buffer:
+                    Train(model=sac_model , trainer=OfflineTrainBuffer  , config= offline_config , online_test = online_test )
+                else:
+                    Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
             elif offline_config.model == 'v4':
                 from network import cql_lstm
                 online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)

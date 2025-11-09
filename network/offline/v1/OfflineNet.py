@@ -126,6 +126,9 @@ class SAC_model(torch.nn.Module):
         cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values.mean()
         cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values.mean()
 
+        # cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values_.mean()
+        # cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values_.mean()
+        
         cql_1_loss = critic_1_loss + self.beta * cql1_scaled_loss
         cql_2_loss = critic_2_loss + self.beta * cql2_scaled_loss
 

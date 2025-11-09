@@ -16,6 +16,7 @@ class CQLSAC(nn.Module):
                         state_size,
                         action_size,
                         hidden_size,
+                        beta,
                         device,
                 ):
         """Initialize an Agent object.
@@ -49,6 +50,7 @@ class CQLSAC(nn.Module):
         self.temp = 1.0
         self.cql_weight = 1.0
         self.target_action_gap = 0.0
+        self.beta = beta
         self.cql_log_alpha = torch.zeros(1, requires_grad=True)
         self.cql_alpha_optimizer = optim.Adam(params=[self.cql_log_alpha], lr=learning_rate) 
         
@@ -165,8 +167,8 @@ class CQLSAC(nn.Module):
             cql_alpha_loss.backward(retain_graph=True)
             self.cql_alpha_optimizer.step()
         
-        total_c1_loss = critic1_loss + cql1_scaled_loss
-        total_c2_loss = critic2_loss + cql2_scaled_loss
+        total_c1_loss = critic1_loss + self.beta * cql1_scaled_loss
+        total_c2_loss = critic2_loss + self.beta * cql2_scaled_loss
         
         
         # Update critics

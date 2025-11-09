@@ -40,7 +40,7 @@ COLLECT:
   # TYPE: "offlineversion3"
   TYPE: "greedy"
   DATA_STRUCT: {"obs":[],"reward":[],"done":[],"action_id":[],"info":[],"map":[],"path_point":[],"sound_id":[] , "greedy_action":[] , "total_sound_point":[]}
-  DATA_DIR: "dataset-data3/dataset/pickle/online_val(val)" #"pickle/greedy"
+  DATA_DIR: "dataset-data3/dataset/pickle/offline(greedy)" #"pickle/greedy"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
@@ -60,32 +60,35 @@ TRAIN:
   val_shard_pattern: ["dataset/hybird/hybird(val_multiple_heard)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
-    model: "v1"
+    buffer : True
+    replay_epoch : 10 # 首先不进行replay buffer
+    model: "v2"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/41"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/73"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
-    train_shard_pattern: "./dataset/offline/pt/v2/train.json"
+    train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
     lr: 0.00004
-    target_entropy: -4
+    target_entropy: -8
     tau: 0.005
-    beta: 0.2
+    beta: 0.01 # 目前测试spl达到0.3的beta
     gamma: 0.99
     batch_size: 1024
-    num_epochs : 20
+    num_epochs : 30
     online_test_epoch : 1
+    list: "beta1"
 
 LMDB:
   OPEN: False
   TYPE: "offlinetwoframe"
   # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
-  RAW_DATA_PATH: "dataset/pickle/v2/offline(version_final_2.0)/level3/"
-  TO_PATH: "dataset/offline/pt/v7/two_frame_2.0/offline"
+  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(greedy)"
+  TO_PATH: "dataset/offline/pt/v8/two_frame_new_greedy/offline"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
