@@ -49,24 +49,24 @@ TRAIN:
   OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
-  # TYPE: "HybirdNetworkAudio"
-  EXPERIMENT_LOSS_DIR: "heard_and_heard/loss"
-  EXPERIMENT_CKPT_DIR: "heard_and_heard/ckpt"
+  # TYPE: "HybirdNetwork"
+  EXPERIMENT_LOSS_DIR: "compare_audio/loss_no_audio_ckpt"
+  EXPERIMENT_CKPT_DIR: "compare_audio/ckpt_no_audio_ckpt"
   # TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   # VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 100
   BATCH_SIZE: 128
-  train_shard_pattern: ["dataset/hybird/hybird(heard_train_multiple)/foundation_model_shard_*.pt"]
-  val_shard_pattern: ["dataset/hybird/hybird(val_multiple_heard)/foundation_model_shard_*.pt"]
+  train_shard_pattern: ["/hdd-data3/yongzhang/final_exp/dataset/hybird/pt/v1/two_frame(train)/foundation_model_shard_*.pt" , "/hdd-data3/yongzhang/final_exp/dataset/hybird/pt/v1/two_frame(collided)/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["/hdd-data3/yongzhang/final_exp/dataset/hybird/pt/v1/two_frame(val)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
     buffer : True
     replay_epoch : 10 # 首先不进行replay buffer
-    model: "v2"
+    model: "v1"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/73"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/76"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
     train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
@@ -74,14 +74,14 @@ TRAIN:
     action_dim: 4
     hidden_dim: 128
     lr: 0.00004
-    target_entropy: -8
+    target_entropy: -4
     tau: 0.005
-    beta: 0.01 # 目前测试spl达到0.3的beta
+    beta: 0 # 目前测试spl达到0.3的beta
     gamma: 0.99
     batch_size: 1024
     num_epochs : 30
     online_test_epoch : 1
-    list: "beta1"
+    list: "动态调整beta"
 
 LMDB:
   OPEN: False
