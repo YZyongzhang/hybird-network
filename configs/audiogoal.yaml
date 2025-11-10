@@ -61,12 +61,12 @@ TRAIN:
   OFFLINE: 
     TYPE: "OfflineRL"
     buffer : True
-    replay_epoch : 10 # 首先不进行replay buffer
+    replay_epoch : 5 # 首先不进行replay buffer
     model: "v1"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/76"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/79"
     EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
     train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
@@ -74,7 +74,7 @@ TRAIN:
     action_dim: 4
     hidden_dim: 128
     lr: 0.00004
-    target_entropy: -4
+    target_entropy: -8
     tau: 0.005
     beta: 0 # 目前测试spl达到0.3的beta
     gamma: 0.99
