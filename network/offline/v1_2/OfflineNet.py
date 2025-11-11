@@ -128,7 +128,14 @@ class SAC_model(torch.nn.Module):
 
         # cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values_.mean()
         # cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values_.mean()
-        
+        cql_gap = torch.max(cql1_scaled_loss , cql2_scaled_loss).detach()
+
+        # 动态调整 beta
+        target_gap = 2.2  # 理想的 logsumexp-Q_mean 差
+        beta_gain = 0.0005  # 调节速率
+        self.beta += beta_gain * (cql_gap.item() - target_gap)
+        self.beta = np.clip(self.beta, 0.0, 5.0)
+
         cql_1_loss = critic_1_loss + self.beta * cql1_scaled_loss
         cql_2_loss = critic_2_loss + self.beta * cql2_scaled_loss
 
@@ -173,5 +180,6 @@ class SAC_model(torch.nn.Module):
             'cql_1_loss': cql_1_loss.item(),
             'cql_2_loss': cql_2_loss.item(),
             'entropy': entropy.mean().item(),
-            'alpha': self.log_alpha.exp().item()
+            'alpha': self.log_alpha.exp().item(),
+            'beta':self.beta
         }

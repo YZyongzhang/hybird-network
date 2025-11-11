@@ -611,10 +611,13 @@ class LoadLmdb:
                     tdepth_next = torch.cat([depth_now , depth_next] , dim = 2)
                     pre_rgb = rgb_now
                     pre_depth = depth_now
+                
                 # 编码成状态向量
-                with torch.no_grad():
-                    state = model.embedding_forward(audio_now.to(model.device), trgb.to(model.device) , tdepth.to(model.device))
-                    next_state = model.embedding_forward(audio_next.to(model.device), trgb_next.to(model.device) , tdepth_next.to(model.device))
+                # with torch.no_grad():
+                #     state = model.embedding_forward(audio_now.to(model.device), trgb.to(model.device) , tdepth.to(model.device))
+                #     next_state = model.embedding_forward(audio_next.to(model.device), trgb_next.to(model.device) , tdepth_next.to(model.device))
+                state = (audio_now , trgb , tdepth)
+                next_state = (audio_next , trgb_next , tdepth_next)
 
                 buffer_states.append(state)
                 buffer_next_states.append(next_state)
@@ -626,8 +629,10 @@ class LoadLmdb:
                 if len(buffer_states) >= shard_size:
                     shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
                     torch.save({
-                        'states': torch.stack(buffer_states),
-                        'next_states': torch.stack(buffer_next_states),
+                        # 'states': torch.stack(buffer_states),
+                        # 'next_states': torch.stack(buffer_next_states),
+                        'states':buffer_states,
+                        'next_states':buffer_next_states,
                         'actions': torch.stack(buffer_actions),
                         'rewards': torch.stack(buffer_rewards),
                         'dones': torch.stack(buffer_dones)
@@ -1037,8 +1042,8 @@ class ShardedPTDatasetOffline(Dataset):
             action      = data["actions"][local_idx]
             reward      = data["rewards"][local_idx]
             done        = data["dones"][local_idx]
-            state = state.squeeze(0)
-            next_state = next_state.squeeze(0)
+            # state = state.squeeze(0)
+            # next_state = next_state.squeeze(0)
             return state, next_state , action, reward, done
         
 class ShardedPTDatasetOfflineBuffer(Dataset):

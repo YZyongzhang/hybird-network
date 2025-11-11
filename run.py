@@ -3,6 +3,7 @@ from configs.default import get_config
 from utils.log import logger
 config = get_config()
 if __name__ == "__main__":
+    # 这里应该做成根据config 做成map匹配的样子
     task_config = config.TASK_CONFIG
     
     if task_config.COLLECT.OPEN :
@@ -88,7 +89,7 @@ if __name__ == "__main__":
             Train(model=model , trainer=HybirdNetworkTrain , config=train_config)
         elif train_config.TYPE == "OfflineRL":
             from run import Train
-            from train import OfflineTrainBuffer , OfflineTrain
+            from train import OfflineTrainBuffer , OfflineTrain , OfflineAndHybird
             from train import OnlineTest
             from network import HybirdNetwork
             import torch
@@ -132,6 +133,37 @@ if __name__ == "__main__":
                     Train(model=sac_model , trainer=OfflineTrainBuffer  , config= offline_config , online_test = online_test )
                 else:
                     Train(model=sac_model , trainer=OfflineTrain  , config= offline_config , online_test = online_test )
+            elif offline_config.model == 'v1_3':
+                from network import SAC_Hybird_model
+                online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)
+                state_dim = offline_config.state_dim
+                action_dim = offline_config.action_dim
+                hidden_dim = offline_config.hidden_dim
+                lr = offline_config.lr
+                target_entropy = offline_config.target_entropy  
+                tau = offline_config.tau
+                gamma = offline_config.gamma
+                beta = offline_config.beta
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                sac_model = SAC_Hybird_model(
+                    state_dim=state_dim,
+                    hidden_dim=hidden_dim,
+                    action_dim=action_dim,
+                    actor_lr=lr,
+                    critic_lr=lr,
+                    alpha_lr=lr,
+                    target_entropy=target_entropy,
+                    tau=tau,
+                    gamma=gamma,
+                    beta=beta,
+                    device=device
+                )
+                if offline_config.LOAD_PATH:
+                    sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH))
+                    sac_model.train()
+                assert not offline_config.buffer
+                Train(model=sac_model , trainer=OfflineAndHybird  , config= offline_config , online_test = online_test )
+
             elif offline_config.model == 'v2':
                 from network import CQLSAC
                 online_test = OnlineTest(env=env , hybirdmodel=model , config=offline_config)

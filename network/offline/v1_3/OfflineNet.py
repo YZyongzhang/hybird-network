@@ -45,11 +45,16 @@ class QValueNet(torch.nn.Module):
         x = self.down(x)
         x = F.relu(self.fc1(x))
         return self.fc2(x)
-class SAC_model(torch.nn.Module):
+class SAC_Hybird_model(torch.nn.Module):
     ''' 处理离散动作的SAC算法 '''
-    def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
+    def __init__(self,  state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
                  alpha_lr, target_entropy, tau, gamma, beta ,device):
-        super(SAC_model, self).__init__()
+        super(SAC_Hybird_model, self).__init__()
+        self.hybird = HybirdNetwork().to(device)
+        self.hybird.load_state_dict(torch.load("compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"))
+        self.hybird.train()
+        self.hybird_optimizer = torch.optim.Adam(self.hybird.parameters(),
+                            lr= actor_lr / 10)
         # 策略网络
         self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
         # 第一个Q网络
@@ -113,9 +118,13 @@ class SAC_model(torch.nn.Module):
 
     def update(self, states, actions, rewards, next_states, dones):
 
+        audio , rgb , depth = states
+        audio_next , rgb_next , depth_next = next_states
+        states = self.hybird.embedding_forward(audio.to(self.device) , rgb.to(self.device) , depth.to(self.device)).float()
+        next_states = self.hybird.embedding_forward(audio_next.to(self.device) , rgb_next.to(self.device) , depth_next.to(self.device)).float()
 
-        states = states.float().to(self.device)
-        next_states = next_states.float().to(self.device)
+        # states = states.float().to(self.device)
+        # next_states = next_states.float().to(self.device)
         rewards = rewards.float().to(self.device)
         # import pdb ; pdb.set_trace()
         dones = dones.float().to(self.device)
@@ -135,7 +144,7 @@ class SAC_model(torch.nn.Module):
         actor_loss = torch.mean(-self.log_alpha.exp() * entropy - min_qvalue)
         # actor_loss = (probs * (self.log_alpha.exp().to(self.device) * log_probs - min_qvalue )).sum(1).mean()
         self.actor_optimizer.zero_grad()
-        actor_loss.backward()
+        actor_loss.backward(retain_graph=True)
         self.actor_optimizer.step()
 
         # 更新alpha值
@@ -152,19 +161,14 @@ class SAC_model(torch.nn.Module):
 
 
         critic_1_q_values = self.critic_1(states)
-        
         critic_1_q_values_ = critic_1_q_values.gather(1, actions).squeeze(1)
-        gap_1 = (torch.max(critic_1_q_values) - critic_1_q_values_).mean()
-        q_1_mean = critic_1_q_values.mean()
+        
         
         critic_1_loss = torch.mean(
             F.mse_loss(critic_1_q_values_, td_target.detach()))
 
         critic_2_q_values = self.critic_2(states)
         critic_2_q_values_ = critic_2_q_values.gather(1, actions).squeeze(1)
-        gap_2 = (torch.max(critic_2_q_values) - critic_2_q_values_).mean()
-        q_2_mean = critic_2_q_values.mean()
-
         critic_2_loss = torch.mean(
             F.mse_loss(critic_2_q_values_, td_target.detach()))
 
@@ -176,14 +180,16 @@ class SAC_model(torch.nn.Module):
         
         cql_1_loss = critic_1_loss + self.beta * cql1_scaled_loss
         cql_2_loss = critic_2_loss + self.beta * cql2_scaled_loss
-
         self.critic_1_optimizer.zero_grad()
         cql_1_loss.backward(retain_graph=True)
         clip_grad_norm_(self.critic_1.parameters(), self.clip_grad_param)
         self.critic_1_optimizer.step()
+
         self.critic_2_optimizer.zero_grad()
+        # self.hybird_optimizer.zero_grad()
         cql_2_loss.backward()
         clip_grad_norm_(self.critic_2.parameters(), self.clip_grad_param)
+        # self.hybird_optimizer.step()
         self.critic_2_optimizer.step()
 
 
@@ -199,10 +205,6 @@ class SAC_model(torch.nn.Module):
             'alpha_loss': alpha_loss.item(),
             'cql_1_loss': cql_1_loss.item(),
             'cql_2_loss': cql_2_loss.item(),
-            'q_1_mean':q_1_mean.item(),
-            'q_2_mean':q_2_mean.item(),
-            'gap_1':gap_1.item(),
-            'gap_2':gap_2.item(),
             'entropy': entropy.mean().item(),
             'alpha': self.log_alpha.exp().item()
         }

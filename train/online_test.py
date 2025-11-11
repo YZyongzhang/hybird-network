@@ -43,7 +43,7 @@ class OnlineTest:
                 action_hybird = action_hybird.argmax(dim=1).item()
                 # pre_rgb = rgb
                 # pre_depth = depth
-            while not done or step < 100:
+            while not done or step < 200:
                 obs , reward , done , info = self.env.step(action=action_sac)
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
@@ -98,7 +98,7 @@ class OnlineTest:
                 action_hybird = action_hybird.argmax(dim=1).item()
                 pre_rgb = rgb
                 pre_depth = depth
-            while not done or step < 100:
+            while not done or step < 200:
                 obs , reward , done , info = self.env.step(action=action_sac)
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
@@ -116,8 +116,13 @@ class OnlineTest:
                     pre_depth = depth
                 step +=1
                 epsiode_reward +=reward
-                if done or step >= 100:
+                if done or step >= 200:
                     logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
+                    top_down_map = plot_top_down_map(info)
+                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
+                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
+                    os.makedirs(f"./spl/{epoch}" , exist_ok=True)
+                    Image.fromarray(top_down_map).save(f"./spl/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
                     break
             total_reward +=  epsiode_reward
             spl += info['spl']

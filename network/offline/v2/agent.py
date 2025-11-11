@@ -124,6 +124,7 @@ class CQLSAC(nn.Module):
         self.actor_optimizer.step()
         
         # Compute alpha loss
+        import pdb;pdb.set_trace()
         alpha_loss = - (self.log_alpha.exp() * (log_pis.cpu() + self.target_entropy).detach().cpu()).mean()
         self.alpha_optimizer.zero_grad()
         alpha_loss.backward()

@@ -60,35 +60,37 @@ TRAIN:
   val_shard_pattern: ["/hdd-data3/yongzhang/final_exp/dataset/hybird/pt/v1/two_frame(val)/foundation_model_shard_*.pt"]
   OFFLINE: 
     TYPE: "OfflineRL"
-    buffer : True
-    replay_epoch : 5 # 首先不进行replay buffer
-    model: "v1"
+    buffer : False
+    replay_epoch : 10000000 # 首先不进行replay buffer
+    model: "v1_3"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "offlineRL/loss/v5model/79"
-    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/v5model/2"
-    train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
+    EXPERIMENT_LOSS_DIR: "offlineRL/loss/finnal_weak/21"
+    EXPERIMENT_CKPT_DIR: "offlineRL/ckpt/finnal_weak/21"
+    # train_shard_pattern: "./dataset/offline/pt/v9/train.json"
+    train_shard_pattern: "dataset-data3/dataset/offline/pt/v10/train.json"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
-    lr: 0.00004
-    target_entropy: -8
+    # lr: 0.00004
+    lr : 0.0005
+    target_entropy: -4
     tau: 0.005
-    beta: 0 # 目前测试spl达到0.3的beta
+    beta: 0.2 # 目前测试spl达到0.3的beta
     gamma: 0.99
     batch_size: 1024
-    num_epochs : 30
-    online_test_epoch : 1
-    list: "动态调整beta"
+    num_epochs : 300
+    online_test_epoch : 10000
+    list: "把tau改成0.01"
 
 LMDB:
   OPEN: False
   TYPE: "offlinetwoframe"
   # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
   RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(greedy)"
-  TO_PATH: "dataset/offline/pt/v8/two_frame_new_greedy/offline"
+  TO_PATH: "dataset-data3/dataset/offline/pt/v10/two_frame_new_greedy/offline"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
