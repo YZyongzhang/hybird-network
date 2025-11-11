@@ -154,7 +154,10 @@ class SAC_model(torch.nn.Module):
         critic_1_q_values = self.critic_1(states)
         
         critic_1_q_values_ = critic_1_q_values.gather(1, actions).squeeze(1)
-        gap_1 = (torch.max(critic_1_q_values) - critic_1_q_values_).mean()
+
+        # critic_1_q_values_target = self.target_critic_1(states)
+        # critic_1_q_values_target_ = critic_1_q_values_target.gather(1,actions).squeeze(1)
+        gap_1 = (torch.max(critic_1_q_values , dim =1).values - critic_1_q_values_).mean()
         q_1_mean = critic_1_q_values.mean()
         
         critic_1_loss = torch.mean(
@@ -162,7 +165,7 @@ class SAC_model(torch.nn.Module):
 
         critic_2_q_values = self.critic_2(states)
         critic_2_q_values_ = critic_2_q_values.gather(1, actions).squeeze(1)
-        gap_2 = (torch.max(critic_2_q_values) - critic_2_q_values_).mean()
+        gap_2 = (torch.max(critic_2_q_values , dim =1).values  - critic_2_q_values_).mean()
         q_2_mean = critic_2_q_values.mean()
 
         critic_2_loss = torch.mean(

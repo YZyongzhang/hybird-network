@@ -14,7 +14,7 @@ train_config = task_config.TRAIN
 offline_config  = train_config.OFFLINE
 
 HybirdNetwork_path = "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
-sac_model_path = './offlineRL/ckpt/finnal_weak/13/sac_2level_model_10.pth'
+sac_model_path = './offlineRL/ckpt/finnal_weak/26/sac_2level_model_1000.pth'
 
 
 env = Env(config=config)
