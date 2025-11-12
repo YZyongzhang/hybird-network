@@ -14,16 +14,15 @@ class PolicyNet(torch.nn.Module):
         super(PolicyNet, self).__init__()
         self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
-        self.down = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(17 * 128 , 256),
-            nn.ReLU(),
-            nn.LayerNorm(256),
-        )
+        # self.down = nn.Sequential(
+        #     nn.Flatten(),
+        #     nn.Linear(17 * 128 , 256),
+        #     nn.ReLU(),
+        #     nn.LayerNorm(256),
+        # )
     def forward(self, x):
         if len(x.shape) < 2: # batch , dim
             x = x.unsqueeze(0)
-        x = self.down(x)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return F.softmax(x, dim=1)
@@ -35,14 +34,14 @@ class QValueNet(torch.nn.Module):
         super(QValueNet, self).__init__()
         self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
-        self.down = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(17 * 128 , 256),
-            nn.ReLU(),
-            nn.LayerNorm(256),
-        )
+        # self.down = nn.Sequential(
+        #     nn.Flatten(),
+        #     nn.Linear(17 * 128 , 256),
+        #     nn.ReLU(),
+        #     nn.LayerNorm(256),
+        # )
     def forward(self, x):
-        x = self.down(x)
+        # x = self.down(x)
         x = F.relu(self.fc1(x))
         return self.fc2(x)
 class SAC_model(torch.nn.Module):
@@ -113,7 +112,6 @@ class SAC_model(torch.nn.Module):
 
     def update(self, states, actions, rewards, next_states, dones):
 
-
         states = states.float().to(self.device)
         next_states = next_states.float().to(self.device)
         rewards = rewards.float().to(self.device)
@@ -121,7 +119,6 @@ class SAC_model(torch.nn.Module):
         dones = dones.float().to(self.device)
         actions = actions.long().to(self.device)
         actions = actions.unsqueeze(1)  # 确保动作是二维的
-
         # 更新策略网络
         probs = self.actor(states)
         log_probs = torch.log(probs + 1e-8)
@@ -152,7 +149,11 @@ class SAC_model(torch.nn.Module):
 
 
         critic_1_q_values = self.critic_1(states)
-        
+        q_max, _ = critic_1_q_values.max(dim=1)
+        q_min, _ = critic_1_q_values.min(dim=1)
+
+        diff = (q_max - q_min).mean().item()
+
         critic_1_q_values_ = critic_1_q_values.gather(1, actions).squeeze(1)
 
         # critic_1_q_values_target = self.target_critic_1(states)
@@ -206,6 +207,7 @@ class SAC_model(torch.nn.Module):
             'q_2_mean':q_2_mean.item(),
             'gap_1':gap_1.item(),
             'gap_2':gap_2.item(),
+            'diff':diff,
             'entropy': entropy.mean().item(),
             'alpha': self.log_alpha.exp().item()
         }

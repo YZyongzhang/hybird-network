@@ -86,7 +86,7 @@ class OfflineTrainBuffer:
         
         global_step = 0
         for epoch in tqdm(range(1, self.epoch + 1),desc="epoch nums"):
-            if epoch % self.config.replay_epoch == 0 and epoch != 0 and epoch < 50:
+            if epoch % self.config.replay_epoch == 0 and epoch != 0 and epoch < 10:
                 self.dataset.replay(logger)
                 self.dataloader = DataLoader(self.dataset, batch_size=self.config.batch_size, shuffle=True ,  pin_memory=True)
             for batch in self.dataloader:

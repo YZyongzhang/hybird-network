@@ -236,9 +236,9 @@ class Network(nn.Module):
         share_visual_audio_encoder = self.vaencoder(concat_encoder)
         p_share_encoder = self.add_position(share_visual_audio_encoder)
         share_encoder = share_visual_audio_encoder + p_share_encoder
-        # embedding = self.final.fc1(share_encoder)
-        # embedding = embedding.squeeze(0)
-        return  share_encoder
+        embedding = self.final.fc1(share_encoder)
+        embedding = embedding.squeeze(0)
+        return  embedding
     
     def embedding_forward_attention(self, audio , rgb , depth):
         if len(audio.shape) == 3:
