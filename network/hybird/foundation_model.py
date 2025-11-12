@@ -2,10 +2,10 @@ import sys
  
 import torch
 import torch.nn as nn
-from network.ViT import ViTEncoder
-from network.audio import AudioCRNN
-from network.ViT import VisualEncoder , PositionalEcoder
-from network.Encoder import Encoder
+from network.hybird.ViT import ViTEncoder
+from network.hybird.audio import AudioCRNN
+from network.hybird.ViT import VisualEncoder , PositionalEcoder
+from network.hybird.Encoder import Encoder
 class Attention(nn.Module):
     def __init__(self , input_dim , visual_dim , audio_dim ,hidden_dim, output_dim):
         super().__init__()
@@ -96,70 +96,41 @@ class Network(nn.Module):
         self.add_position = PositionalEcoder()
         self.visual_transformer_encoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
         self.audio_encoder = AudioCRNN()
-        path = './HybirdNetworkCkpt/RGBD/audio/model_epoch_best.pth'
-        self.audio_encoder.load_state_dict(torch.load(path) ,  strict=True)
-        self.audio_encoder.eval()
-        for param in self.audio_encoder.parameters():
+        # path = './HybirdNetworkCkpt/RGBD/audio/model_epoch_best.pth'
+        # self.audio_encoder.load_state_dict(torch.load(path) ,  strict=True)
+        # self.audio_encoder.eval()
+        # for param in self.audio_encoder.parameters():
             
-            param.requires_grad = False
+        #     param.requires_grad = False
 
         self.vaencoder =  Encoder(d_model=128 , ffn_hidden=64,n_head=4,n_layers=3,drop_prob=0.2)
         self.final = Finnal_model(input_dim = 512 , hidden_dim= 256 , output_dim=4)
         self.device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
 
-    def forward(self,audio , rgb , depth , pre_rgb , pre_depth):
-        if len(audio.shape) == 3:
-            audio = audio.unsqueeze(0)
-        if len(rgb.shape) == 3:
-            rgb = rgb.unsqueeze(0)
-        if len(depth.shape) == 3:
-            depth = depth.unsqueeze(0)
-        if len(pre_rgb.shape) == 3:
-            pre_rgb = pre_rgb.unsqueeze(0)
-        if len(pre_depth.shape) == 3:
-            pre_depth = pre_depth.unsqueeze(0)
-        rgb = rgb.permute(0,3, 1, 2)
-        depth = depth.permute(0,3, 1, 2)
-        pre_rgb = pre_rgb.permute(0,3, 1, 2)
-        pre_depth = pre_depth.permute(0,3, 1, 2)
-        rgbd = torch.cat([rgb, depth], dim=1)
-        pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
-        total = torch.cat([rgbd , pre_rgbd] , dim=1)
-        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        
-        
-        with torch.no_grad():
-            audio_encoder = self.audio_encoder.encoder_forward(audio)
-        visual_cnn = self.visual_encoder(total)
-        v_batch , v_dim , v_h , v_w = visual_cnn.shape
-        visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
-        v_position = self.add_position(visual_cnn)
-        visual_cnn = visual_cnn + v_position
-        visual_encoder = self.visual_transformer_encoder(visual_cnn)
-        concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
-        share_visual_audio_encoder = self.vaencoder(concat_encoder)
-        p_share_encoder = self.add_position(share_visual_audio_encoder)
-        share_encoder = share_visual_audio_encoder + p_share_encoder
-
-        finnal_output = self.final(share_encoder)
-        return finnal_output
-        return attentioned
-    # def forward(self,audio , rgb , depth):
+    # def forward(self,audio , rgb , depth , pre_rgb , pre_depth):
     #     if len(audio.shape) == 3:
     #         audio = audio.unsqueeze(0)
     #     if len(rgb.shape) == 3:
     #         rgb = rgb.unsqueeze(0)
     #     if len(depth.shape) == 3:
     #         depth = depth.unsqueeze(0)
+    #     if len(pre_rgb.shape) == 3:
+    #         pre_rgb = pre_rgb.unsqueeze(0)
+    #     if len(pre_depth.shape) == 3:
+    #         pre_depth = pre_depth.unsqueeze(0)
     #     rgb = rgb.permute(0,3, 1, 2)
     #     depth = depth.permute(0,3, 1, 2)
+    #     pre_rgb = pre_rgb.permute(0,3, 1, 2)
+    #     pre_depth = pre_depth.permute(0,3, 1, 2)
     #     rgbd = torch.cat([rgb, depth], dim=1)
+    #     pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
+    #     total = torch.cat([rgbd , pre_rgbd] , dim=1)
     #     audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         
         
     #     with torch.no_grad():
     #         audio_encoder = self.audio_encoder.encoder_forward(audio)
-    #     visual_cnn = self.visual_encoder(rgbd)
+    #     visual_cnn = self.visual_encoder(total)
     #     v_batch , v_dim , v_h , v_w = visual_cnn.shape
     #     visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
     #     v_position = self.add_position(visual_cnn)
@@ -172,6 +143,35 @@ class Network(nn.Module):
 
     #     finnal_output = self.final(share_encoder)
     #     return finnal_output
+    def forward(self,audio , rgb , depth):
+        # import pdb;pdb.set_trace()
+        if len(audio.shape) == 3:
+            audio = audio.unsqueeze(0)
+        if len(rgb.shape) == 3:
+            rgb = rgb.unsqueeze(0)
+        if len(depth.shape) == 3:
+            depth = depth.unsqueeze(0)
+        rgb = rgb.permute(0,3, 1, 2)
+        depth = depth.permute(0,3, 1, 2)
+        rgbd = torch.cat([rgb, depth], dim=1)
+        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        
+        
+        with torch.no_grad():
+            audio_encoder = self.audio_encoder.encoder_forward(audio)
+        visual_cnn = self.visual_encoder(rgbd)
+        v_batch , v_dim , v_h , v_w = visual_cnn.shape
+        visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
+        v_position = self.add_position(visual_cnn)
+        visual_cnn = visual_cnn + v_position
+        visual_encoder = self.visual_transformer_encoder(visual_cnn)
+        concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
+        share_visual_audio_encoder = self.vaencoder(concat_encoder)
+        p_share_encoder = self.add_position(share_visual_audio_encoder)
+        share_encoder = share_visual_audio_encoder + p_share_encoder
+
+        finnal_output = self.final(share_encoder)
+        return finnal_output
     
     # def embedding_forward(self, audio , rgb , depth  , pre_rgb , pre_depth):
     #     if len(audio.shape) == 3:
@@ -248,5 +248,39 @@ class Network(nn.Module):
         p_share_encoder = self.add_position(share_visual_audio_encoder)
         share_encoder = share_visual_audio_encoder + p_share_encoder
         embedding = self.final.fc1(share_encoder)
-        embedding.squeeze(0)
-        return embedding
+        embedding = embedding.squeeze(0)
+        return  embedding
+    
+    def embedding_forward_attention(self, audio , rgb , depth):
+        if len(audio.shape) == 3:
+            audio = audio.unsqueeze(0)
+        if len(rgb.shape) == 3:
+            rgb = rgb.unsqueeze(0)
+        if len(depth.shape) == 3:
+            depth = depth.unsqueeze(0)
+
+        rgb = rgb.permute(0,3, 1, 2)
+        depth = depth.permute(0,3, 1, 2)
+
+        rgbd = torch.cat([rgb, depth], dim=1)
+        audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        
+        
+        with torch.no_grad():
+            audio_encoder = self.audio_encoder.encoder_forward(audio)
+        visual_cnn = self.visual_encoder(rgbd)
+        v_batch , v_dim , v_h , v_w = visual_cnn.shape
+        visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
+        v_position = self.add_position(visual_cnn)
+        visual_cnn = visual_cnn + v_position
+        visual_encoder = self.visual_transformer_encoder(visual_cnn)
+        concat_encoder = torch.cat((audio_encoder , visual_encoder ) , dim=1)
+        share_visual_audio_encoder = self.vaencoder(concat_encoder)
+        p_share_encoder = self.add_position(share_visual_audio_encoder)
+        share_encoder = share_visual_audio_encoder + p_share_encoder
+        embedding = self.final.fc1(share_encoder)
+        embedding = self.final.fc2[0](embedding)
+        embedding = embedding.squeeze(0)
+        audio_encoder = audio_encoder.squeeze(0)
+        return audio_encoder , embedding
+        # return embedding

@@ -29,9 +29,7 @@ def draw_points_on_map(topdown_map, points=None):
             cv2.circle(img, tuple(np.array(pt, dtype=np.int32)), radius=5, color=(255, 0, 0), thickness=-1)  # 红色填充点
 
     return img
-
-def draw_sound(sim , top_down_map ,point_type):
-    position = sim.get_sound_state()
+def draw_point(sim , position , top_down_map):
     t_x, t_y = maps.to_grid(
         position[2],
         position[0],
@@ -44,7 +42,45 @@ def draw_sound(sim , top_down_map ,point_type):
     top_down_map[
         t_x - point_padding : t_x + point_padding + 1,
         t_y - point_padding : t_y + point_padding + 1,
-    ] = point_type
+    ] = (255, 0, 0)
+
+def draw_sound(sim , agent_pos , sound_points , top_down_map ,point_type):
+    for index , position in enumerate(sound_points):
+        t_x, t_y = maps.to_grid(
+            position[2],
+            position[0],
+            (top_down_map.shape[0], top_down_map.shape[1]),
+            sim=sim,
+        )
+        point_padding = 2 * int(
+                np.ceil(512 / MAP_THICKNESS_SCALAR)
+        )
+        if index == 100:
+            top_down_map[
+                t_x - point_padding : t_x + point_padding + 1,
+                t_y - point_padding : t_y + point_padding + 1,
+            ] = (255, 0, 0)
+        elif index == len(sound_points) -1:
+            top_down_map[
+                t_x - point_padding : t_x + point_padding + 1,
+                t_y - point_padding : t_y + point_padding + 1,
+            ] = (0, 0, 255)
+        else:
+            top_down_map[
+                t_x - point_padding : t_x + point_padding + 1,
+                t_y - point_padding : t_y + point_padding + 1,
+            ] = point_type
+    t_x, t_y = maps.to_grid(
+            agent_pos[2],
+            agent_pos[0],
+            (top_down_map.shape[0], top_down_map.shape[1]),
+            sim=sim,
+        )
+
+    top_down_map[
+        t_x - point_padding : t_x + point_padding + 1,
+        t_y - point_padding : t_y + point_padding + 1,
+    ] = (0, 255, 0)
 
 def draw_agent(
     image: np.ndarray,
@@ -60,7 +96,7 @@ def real_point_to_grid(sim , path_points , top_down_map):
         grid_point.append(maps.to_grid(point[2] , point[0]  , (top_down_map.shape[0] , top_down_map.shape[1]) , sim  , sim.pathfinder))
     return grid_point
 
-def draw_map(env, path_points):
+def draw_map(env, path_points , agent_pos , sound_points):
         import math
         from scipy.spatial.transform import Rotation as R
         sim = env._env._sim
@@ -74,7 +110,7 @@ def draw_map(env, path_points):
         
         # 保证在 0~360 之间
         yaw = (yaw + 360) % 360
-        draw_sound(sim,top_down_map , maps.MAP_VIEW_POINT_INDICATOR)
+        draw_sound(sim , agent_pos , sound_points,top_down_map , maps.MAP_VIEW_POINT_INDICATOR)
         maps.draw_path(top_down_map, path_points)
         top_down_map = maps.draw_agent(
             top_down_map, path_points[-1], yaw, agent_radius_px=8
@@ -318,3 +354,86 @@ def save_audio_or_silence(audio_data, output_path, samplerate=16000, silence_thr
 
 # 用法
 # save_audio_or_silence(data['obs'][6]['spectrogram'][1], "output.wav")
+from moviepy.audio.AudioClip import CompositeAudioClip, AudioArrayClip
+import moviepy.editor as mpy
+def images_to_video_with_audio(
+    images: List[np.ndarray],
+    output_dir: str,
+    video_name: str,
+    audios: List[str],
+    sr: int,
+    fps: int = 1,
+    quality: Optional[float] = 5,
+    **kwargs
+):
+    r"""Calls imageio to run FFMPEG on a list of images. For more info on
+    parameters, see https://imageio.readthedocs.io/en/stable/format_ffmpeg.html
+    Args:
+        images: The list of images. Images should be HxWx3 in RGB order.
+        output_dir: The folder to put the video in.
+        video_name: The name for the video.
+        audios: raw audio files
+        fps: Frames per second for the video. Not all values work with FFMPEG,
+            use at your own risk.
+        quality: Default is 5. Uses variable bit rate. Highest quality is 10,
+            lowest is 0.  Set to None to prevent variable bitrate flags to
+            FFMPEG so you can manually specify them using output_params
+            instead. Specifying a fixed bitrate using ‘bitrate’ disables
+            this parameter.
+    """
+    assert 0 <= quality <= 10
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    video_name = video_name.replace(" ", "_").replace("\n", "_") + ".mp4"
+
+    audio_clips = []
+    multiplier = 0.5
+    for i, audio in enumerate(audios):
+        audio_clip = AudioArrayClip(audio.T[:int(sr * 1 / fps)] * multiplier, fps=sr)
+        audio_clip = audio_clip.set_start(1 / fps * i)
+        audio_clips.append(audio_clip)
+    composite_audio_clip = CompositeAudioClip(audio_clips)
+    video_clip = mpy.ImageSequenceClip(images, fps=fps)
+    video_with_new_audio = video_clip.set_audio(composite_audio_clip)
+    video_with_new_audio.write_videofile(os.path.join(output_dir, video_name))
+
+def generate_video(
+    video_option: List[str],
+    video_dir: Optional[str],
+    images: List[np.ndarray],
+    scene_name: str,
+    sound: str,
+    sr: int,
+    episode_id: int,
+    checkpoint_idx: int,
+    metric_name: str,
+    metric_value: float,
+    fps: int = 10,
+    audios: List[str] = None
+) -> None:
+    r"""Generate video according to specified information.
+
+    Args:
+        video_option: string list of "tensorboard" or "disk" or both.
+        video_dir: path to target video directory.
+        images: list of images to be converted to video.
+        episode_id: episode id for video naming.
+        checkpoint_idx: checkpoint index for video naming.
+        metric_name: name of the performance metric, e.g. "spl".
+        metric_value: value of metric.
+        tb_writer: tensorboard writer object for uploading video.
+        fps: fps for generated video.
+        audios: raw audio files
+    Returns:
+        None
+    """
+    if len(images) < 1:
+        return
+
+    video_name = f"{scene_name}_{episode_id}_{sound}_{metric_name}{metric_value:.2f}"
+    if "disk" in video_option:
+        assert video_dir is not None
+        if audios is None:
+            images_to_video(images, video_dir, video_name)
+        else:
+            images_to_video_with_audio(images, video_dir, video_name, audios, sr, fps=fps)

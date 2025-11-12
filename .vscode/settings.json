@@ -4,5 +4,8 @@
         "/home/kongxiangyu/yongzhang/sound-spaces",
         "/home/kongxiangyu/yongzhang/habitat-lab",
         "/home/kongxiangyu/yongzhang/habitat-sim/src_python"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
 }

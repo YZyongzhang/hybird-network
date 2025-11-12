@@ -6,5 +6,7 @@ dataset/
 HybridNetworkStoreOldExperiment/
 HybirdNetworkCkpt/
 *.txt
+*.pth
 exp/
 *.png
+events.*

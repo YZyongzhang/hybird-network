@@ -1,5 +1,5 @@
 import torch.nn as nn
-from network.Encoder import Encoder
+from network.hybird.Encoder import Encoder
 import torch
 class PositionalEcoder(nn.Module):
     def __init__(self, max_len = 10000, d_models = 128 , device = None):
