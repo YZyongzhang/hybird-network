@@ -144,6 +144,7 @@ class Network(nn.Module):
     #     finnal_output = self.final(share_encoder)
     #     return finnal_output
     def forward(self,audio , rgb , depth):
+        # import pdb;pdb.set_trace()
         if len(audio.shape) == 3:
             audio = audio.unsqueeze(0)
         if len(rgb.shape) == 3:

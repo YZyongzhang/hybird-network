@@ -4,7 +4,7 @@ logger.setLevel(logging.INFO)
 
 log_name = input("please input log name : ")
 # 创建文件 handler
-file_handler = logging.FileHandler(f"./final_weak_log/log_{log_name}.txt", mode="w", encoding="utf-8")
+file_handler = logging.FileHandler(f"./final/telephone/log_{log_name}.txt", mode="w", encoding="utf-8")
 file_handler.setLevel(logging.INFO)
 
 # 设置日志格式

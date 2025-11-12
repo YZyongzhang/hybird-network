@@ -35,8 +35,9 @@ class CQLSAC(nn.Module):
         self.device = device
         
         self.gamma = 0.99
-        self.tau = 1e-2
-        learning_rate = 5e-4
+        # self.tau = 1e-2
+        self.tau = 0.005
+        learning_rate = 4e-5
         self.clip_grad_param = 1
 
         self.target_entropy = -action_size  # -dim(A)
@@ -46,11 +47,11 @@ class CQLSAC(nn.Module):
         self.alpha_optimizer = optim.Adam(params=[self.log_alpha], lr=learning_rate) 
         
         # CQL params
-        self.with_lagrange = False
+        self.with_lagrange = True
         self.temp = 1.0
         self.cql_weight = 1.0
-        self.target_action_gap = 0.0
-        self.beta = beta
+        self.target_action_gap = 4.0
+        # self.beta = beta
         self.cql_log_alpha = torch.zeros(1, requires_grad=True)
         self.cql_alpha_optimizer = optim.Adam(params=[self.cql_log_alpha], lr=learning_rate) 
         
@@ -124,7 +125,6 @@ class CQLSAC(nn.Module):
         self.actor_optimizer.step()
         
         # Compute alpha loss
-        import pdb;pdb.set_trace()
         alpha_loss = - (self.log_alpha.exp() * (log_pis.cpu() + self.target_entropy).detach().cpu()).mean()
         self.alpha_optimizer.zero_grad()
         alpha_loss.backward()
@@ -168,8 +168,8 @@ class CQLSAC(nn.Module):
             cql_alpha_loss.backward(retain_graph=True)
             self.cql_alpha_optimizer.step()
         
-        total_c1_loss = critic1_loss + self.beta * cql1_scaled_loss
-        total_c2_loss = critic2_loss + self.beta * cql2_scaled_loss
+        total_c1_loss = critic1_loss + self.cql_weight * cql1_scaled_loss
+        total_c2_loss = critic2_loss + self.cql_weight * cql2_scaled_loss
         
         
         # Update critics

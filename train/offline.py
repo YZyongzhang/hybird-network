@@ -33,7 +33,7 @@ class OfflineTrain:
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
                 tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
-            if epoch % 10 == 0 :
+            if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
             if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
                 # train_acc = self.val(epoch)
