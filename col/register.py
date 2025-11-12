@@ -242,30 +242,6 @@ class OfflineCollect:
                 # hybird network 
                 self.save_data = copy.deepcopy(self.save_data_struct)
                 step = 0
-<<<<<<< HEAD
-                path_point = []
-                obs = self.env.reset()
-                done = False
-                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-                depth = torch.from_numpy(obs['depth']).float()
-                audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
-                action = torch.argmax(logits).item()
-                self.save(action_id = action)
-                self.save(sound_id = self.env._env.current_episode.info['sound'])
-                self.save(obs=obs)
-                path_point.append(self.sim.get_agent_state().position)
-                while not done:
-                
-                    obs , reward , done , info = self.env.step(action=action)
-                    step +=1
-                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-                    depth = torch.from_numpy(obs['depth']).float()
-                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                    logits = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
-                    action = torch.argmax(logits).item()
-                    self.save(action_id = action)
-=======
                 pre_action_collided = False
                 path_point = []
                 obs = self.env.reset()
@@ -292,7 +268,6 @@ class OfflineCollect:
                         pre_action_collided = False
                         reward +=1
                     step +=1
->>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
                     self.save(obs=obs,reward=reward,done=done,info=info)
                     path_point.append(self.sim.get_agent_state().position)
                     if done or step > 20:
@@ -309,10 +284,7 @@ class OfflineCollect:
                         if done:
                             # 这个地方会出现一次超过最大步数的done。所以如果没有break就会报错
                             print(f"action is {action} , action_list is {action_id} , done is {done} , info is {info}")
-<<<<<<< HEAD
-=======
                             break
->>>>>>> 8cdf5fcf58b8de4e1474607f603a41f22700168b
                 
                 self.save(map=draw_map(self.env , path_point))
                 self.save(path_point=path_point)

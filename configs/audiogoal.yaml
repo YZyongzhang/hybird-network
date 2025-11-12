@@ -45,7 +45,7 @@ COLLECT:
   COLLECT_CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   SAVE_LOADER: False
   # TYPE: "HybirdNetwork"
   # EXPERIMENT_LOSS_DIR: "experiment/compare/loss/hybirdnetwork_one"
@@ -86,11 +86,11 @@ TRAIN:
     num_epochs : 1000
 
 LMDB:
-  OPEN: False
-  TYPE: "HybirdNetwork"
-  RAW_DATA_PATH: "greedy_val"
-  # RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_val)"
-  TO_PATH: "dataset/pt/v2/greedy(val)"
+  OPEN: True
+  TYPE: "HybirdNetworkTwoFrame"
+  # RAW_DATA_PATH: "greedy_val"
+  RAW_DATA_PATH: "dataset/pickle/v2/greedy(hybirdnetwork_with_RGBD_train)"
+  TO_PATH: "dataset/pt/v2/greedy(train_two_frame)"
   CKPT: "experiment/ckpt/hybirdnetworkRGBDCollided100k_1_lr/model_epoch_100.pth"
 
 
