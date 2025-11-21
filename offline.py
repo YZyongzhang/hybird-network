@@ -32,7 +32,7 @@ class OfflineTrain:
                 tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
             if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
+            if epoch % self.online_test_epoch== 0:
                 # train_acc = self.val(epoch)
                 self.agent.eval()
                 online_reward  , spl = self.online_test.rollout(epoch , self.agent ,logger )
@@ -57,8 +57,8 @@ class OfflineTrain:
                 actions = actions.long()  
                 a_predicted_logits = self.agent.get_action(states)  
 
-                pred_classes = torch.argmax(a_predicted_logits, dim=1)   # 预测类别
-                correct = (pred_classes == actions).sum().item()         # 预测正确的数量
+                pred_classes = torch.argmax(a_predicted_logits, dim=1)  
+                correct = (pred_classes == actions).sum().item()        
                 total_correct += correct
                 total_samples += actions.size(0)
 
