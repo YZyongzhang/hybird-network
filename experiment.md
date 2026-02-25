@@ -36,6 +36,32 @@
 66：v1model设置固定alpha结果
 
 
+### time 2026-02-25
+#### 本次代码改动（离线 v1_3 评测可直接调用）
+1. 新增评测脚本：`tools/eval_hybrid_sac.py`
+   - 固定为 `v1_3 Offline SAC` 评测。
+   - 同时评测 `hybrid` 和 `sac`，输出 `avg_reward / avg_spl / success_rate / avg_steps`，并输出二者 `delta`。
+   - 新增可复用函数 `run_v1_3_eval(...)`，供主入口直接调用。
+2. 新增包文件：`tools/__init__.py`
+   - 使 `run.py` 可直接 `from tools.eval_hybrid_sac import run_v1_3_eval`。
+3. 修改主入口：`run.py`
+   - 增加 `EVAL.OPEN` 分支。
+   - 当 `EVAL.TYPE == "OfflineRL_v1_3"` 时，直接调用 `run_v1_3_eval(...)`。
+4. 修改配置：`configs/audiogoal.yaml`
+   - 增加 `EVAL` 配置段（`OPEN/TYPE/HYBRID_CKPT/SAC_CKPT/EPISODES/MAX_STEPS/SEED/STOCHASTIC_SAC`）。
+
+#### 使用方式
+1. 在 `configs/audiogoal.yaml` 中设置：
+   - `EVAL.OPEN: True`
+   - `LMDB.OPEN: False`
+   - `TRAIN.OPEN: False`
+   - `COLLECT.OPEN: False`
+   - 并确认 `EVAL.SAC_CKPT` 路径正确。
+2. 直接运行：`python run.py`
+
+#### 目的
+统一入口，减少手动改脚本和命令行参数的成本，确保可以快速复现实验并稳定对比 hybrid 与 v1_3 offline sac 的 SPL 等指标。
+
 
 
 

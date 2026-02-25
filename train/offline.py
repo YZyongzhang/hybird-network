@@ -12,6 +12,7 @@ class OfflineTrain:
     def __init__(self, dataset , dataloader , sac_model, writer , online_test ,online_test_epoch ,  batch_size, epoch , save_dir ,  config ,device='cuda'):
         self.device = device
         self.agent = sac_model
+        self.dataset = dataset
         self.batch_size = batch_size
         self.dataloader = dataloader
         self.writer = writer
@@ -19,6 +20,8 @@ class OfflineTrain:
         self.online_test = online_test
         self.online_test_epoch = online_test_epoch
         self.save_dir = save_dir
+        self.config = config
+        self.log_interval = int(getattr(config, "log_interval", 100))
     def train(self):
         
         global_step = 0
@@ -32,7 +35,11 @@ class OfflineTrain:
 
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
-                tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
+                if global_step % self.log_interval == 0:
+                    tqdm.write(
+                        f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
+                        f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
+                    )
             if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
             if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
@@ -43,6 +50,15 @@ class OfflineTrain:
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
                 self.writer.add_scalar("Val/spl", spl, global_step=epoch)
+            if hasattr(self.dataset, "on_epoch_end"):
+                self.dataset.on_epoch_end()
+                self.dataloader = DataLoader(
+                    self.dataset,
+                    batch_size=self.config.batch_size,
+                    shuffle=True,
+                    num_workers=int(getattr(self.config, "NUM_WORKERS", 0)),
+                    pin_memory=True,
+                )
                 
 
     def val(self, epoch):
@@ -82,6 +98,7 @@ class OfflineTrainBuffer:
         self.online_test_epoch = online_test_epoch
         self.save_dir = save_dir
         self.config = config
+        self.log_interval = int(getattr(config, "log_interval", 100))
     def train(self):
         
         global_step = 0
@@ -98,7 +115,11 @@ class OfflineTrainBuffer:
 
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
-                tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
+                if global_step % self.log_interval == 0:
+                    tqdm.write(
+                        f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
+                        f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
+                    )
             if epoch % 1 == 0 :
                 torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
             if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
@@ -109,6 +130,15 @@ class OfflineTrainBuffer:
                 # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
                 self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
                 self.writer.add_scalar("Val/spl", spl, global_step=epoch)
+            if hasattr(self.dataset, "on_epoch_end"):
+                self.dataset.on_epoch_end()
+                self.dataloader = DataLoader(
+                    self.dataset,
+                    batch_size=self.config.batch_size,
+                    shuffle=True,
+                    num_workers=int(getattr(self.config, "NUM_WORKERS", 0)),
+                    pin_memory=True,
+                )
                 
 
     def val(self, epoch):
@@ -148,6 +178,7 @@ class OfflineAndHybird:
         self.online_test_epoch = online_test_epoch
         self.save_dir = save_dir
         self.config = config
+        self.log_interval = int(getattr(config, "log_interval", 100))
     def train(self):
         
         global_step = 0
@@ -166,17 +197,30 @@ class OfflineAndHybird:
 
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
-                tqdm.write(f"actor_loss: {loss_dict['actor_loss']} , critic1_loss:{loss_dict['critic1_loss']} , critic2_loss:{loss_dict['critic2_loss']}")
-            if epoch % 10 == 0 :
-                torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
-                # train_acc = self.val(epoch)
-                self.agent.eval()
-                online_reward  , spl = self.online_test.rollout(epoch , self.agent ,logger )
-                self.agent.train()
-                # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
-                self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
-                self.writer.add_scalar("Val/spl", spl, global_step=epoch)
+                # if global_step % self.log_interval == 0:
+                tqdm.write(
+                        f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
+                        f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
+                    )
+            # if epoch % 10 == 0 :
+            #     torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
+            # if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
+            #     # train_acc = self.val(epoch)
+            #     self.agent.eval()
+            #     online_reward  , spl = self.online_test.rollout(epoch , self.agent ,logger )
+            #     self.agent.train()
+            #     # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
+            #     self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
+            #     self.writer.add_scalar("Val/spl", spl, global_step=epoch)
+            if hasattr(self.dataset, "on_epoch_end"):
+                self.dataset.on_epoch_end()
+                self.dataloader = DataLoader(
+                    self.dataset,
+                    batch_size=self.config.batch_size,
+                    shuffle=True,
+                    num_workers=int(getattr(self.config, "NUM_WORKERS", 0)),
+                    pin_memory=True,
+                )
                 
 
     def val(self, epoch):
