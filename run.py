@@ -79,6 +79,23 @@ if __name__ == "__main__":
             model.load_state_dict(torch.load(loadlmdb_config.CKPT))
             model.eval()
             LoadLmdb.load_offline_lstm_level_audio_visual(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
+
+    elif task_config.EVAL.OPEN:
+        eval_config = task_config.EVAL
+        logger.info(eval_config)
+        if eval_config.TYPE == "OfflineRL_v1_3":
+            from tools.eval_hybrid_sac import run_v1_3_eval
+            run_v1_3_eval(
+                config=config,
+                hybrid_ckpt=eval_config.HYBRID_CKPT,
+                sac_ckpt=eval_config.SAC_CKPT,
+                episodes=eval_config.EPISODES,
+                max_steps=eval_config.MAX_STEPS,
+                seed=eval_config.SEED,
+                stochastic_sac=eval_config.STOCHASTIC_SAC,
+            )
+        else:
+            raise ValueError(f"Unsupported EVAL.TYPE: {eval_config.TYPE}")
     
     elif task_config.TRAIN.OPEN:
         train_config = task_config.TRAIN

@@ -87,6 +87,16 @@ TRAIN:
     online_test_epoch : 1
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
 
+EVAL:
+  OPEN: False
+  TYPE: "OfflineRL_v1_3"
+  HYBRID_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
+  SAC_CKPT: "final/telephone/ckpt/8/sac_2level_model_300.pth"
+  EPISODES: 0
+  MAX_STEPS: 200
+  SEED: 0
+  STOCHASTIC_SAC: False
+
 LMDB:
   OPEN: True
   TYPE: "OfflineTwoFrameWithHybridLMDB"
