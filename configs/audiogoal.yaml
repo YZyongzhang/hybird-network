@@ -46,12 +46,12 @@ COLLECT:
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   # TYPE: "HybirdNetwork"
-  EXPERIMENT_LOSS_DIR: "hu/heard/loss"
-  EXPERIMENT_CKPT_DIR: "hu/heard/ckpt"
+  EXPERIMENT_LOSS_DIR: "PR/heard/loss"
+  EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
   # TRAIN_DATASET: "dataset/lmdb/v2/greedy(angle_train)"
   # VAL_DATASET: "dataset/lmdb/v2/greedy(angle_val)"
   EPOCH: 100
@@ -62,15 +62,16 @@ TRAIN:
     TYPE: "OfflineRL"
     buffer : False
     replay_epoch : 1000 # 首先不进行replay buffer
-    model: "v4"
+    model: "v1_3"
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "final/telephone/loss/6"
-    EXPERIMENT_CKPT_DIR: "final/telephone/ckpt/6"
+    EXPERIMENT_LOSS_DIR: "final/telephone/loss/8"
+    EXPERIMENT_CKPT_DIR: "final/telephone/ckpt/8"
     # train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
-    train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
-    # train_shard_pattern: "dataset-data3/dataset/offline/pt/v10/train.json"
+    # train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
+    train_shard_pattern: "dataset-data3/dataset/offline/pt/v10/train.json"
+    train_lmdb_path: "media/lmdb/offline_with_hybrid"
     ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
@@ -81,24 +82,25 @@ TRAIN:
     tau: 0.005
     beta: 0.001
     gamma: 0.99
-    batch_size: 1024
+    batch_size: 128
     num_epochs : 300
     online_test_epoch : 1
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
 
 LMDB:
-  OPEN: False
-  TYPE: "HybirdNetworkTwoFrame"
+  OPEN: True
+  TYPE: "OfflineTwoFrameWithHybridLMDB"
+  CHUNK_SIZE: 512
   # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
-  RAW_DATA_PATH: "dataset-data3/dataset/pickle/hybird(val_multiple)"
-  TO_PATH: "dataset-data3/dataset/pt/hybird(heard_val_multiple_two_frame)"
+  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(greedy)"
+  TO_PATH: "media/lmdb/offline_with_hybrid"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_telephone"
+  SPLIT: "val_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_select.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"

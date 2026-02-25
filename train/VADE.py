@@ -14,6 +14,7 @@ from PIL import Image
 import random
 from network.hybird.foundation_model import Network
 import glob
+CHUNK_SIZE = 2048
 class LoadLmdb:
 
     def __init__(self, path):
@@ -73,7 +74,341 @@ class LoadLmdb:
         txn.commit()
         env.close()
         print(f"dataset location the {config.LMDB.TO_PATH}")
+    @classmethod
+    def load_offline_two_frame_lmdb(cls, path, model, config):
 
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        # --------- 打开 LMDB ----------
+        map_size = 1024 ** 3 * 20  # 1TB 上限（必须给足，不够会报错）
+        env = lmdb.open(
+            config.LMDB.TO_PATH,
+            map_size=map_size,
+            subdir=True,
+            meminit=False,
+            map_async=True
+        )
+
+        txn = env.begin(write=True)
+
+        global_index = 0
+        commit_interval = 1000   # 每1000条 commit 一次（非常重要）
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist()
+
+            for i in range(len(obs) - 1):
+
+                v_now = obs[i]
+                v_next = obs[i + 1]
+
+                a = action_id[i]
+                r = rewards[i]
+                d = dones[i]
+
+                # ---------- 提取 ----------
+                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                depth_now = torch.from_numpy(v_now['depth']).float()
+                audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
+
+                rgb_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                depth_next = torch.from_numpy(v_next['depth']).float()
+                audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
+
+                if i == 0:
+                    pre_rgb = torch.zeros_like(rgb_now)
+                    pre_depth = torch.zeros_like(depth_now)
+
+                trgb = torch.cat([pre_rgb, rgb_now], dim=2)
+                tdepth = torch.cat([pre_depth, depth_now], dim=2)
+                trgb_next = torch.cat([rgb_now, rgb_next], dim=2)
+                tdepth_next = torch.cat([depth_now, depth_next], dim=2)
+
+                pre_rgb = rgb_now
+                pre_depth = depth_now
+
+                # ---------- embedding ----------
+                with torch.no_grad():
+                    state = model.embedding_forward(
+                        audio_now.to(model.device),
+                        trgb.to(model.device),
+                        tdepth.to(model.device)
+                    ).cpu()
+
+                    next_state = model.embedding_forward(
+                        audio_next.to(model.device),
+                        trgb_next.to(model.device),
+                        tdepth_next.to(model.device)
+                    ).cpu()
+
+                sample = {
+                    "state": state,
+                    "next_state": next_state,
+                    "action": torch.tensor(a, dtype=torch.long),
+                    "reward": torch.tensor(r, dtype=torch.float),
+                    "done": torch.tensor(d, dtype=torch.bool)
+                }
+
+                key = f"{global_index:08d}".encode()
+                txn.put(key, pickle.dumps(sample))
+
+                global_index += 1
+
+                # ---------- 定期 commit ----------
+                if global_index % commit_interval == 0:
+                    txn.commit()
+                    txn = env.begin(write=True)
+
+        txn.commit()
+        env.sync()
+        env.close()
+
+        print(f"LMDB 写入完成，总样本数: {global_index}")
+    @classmethod
+    def load_offline_with_hybrid_lmdb(cls, path, config):
+
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        # ⚠️ 必须给足 map_size
+        map_size = 1024 ** 3 * 200  # 200G 
+        env = lmdb.open(
+            config.LMDB.TO_PATH,
+            map_size=map_size,
+            subdir=True,
+            meminit=False,
+            map_async=True
+        )
+
+        txn = env.begin(write=True)
+
+        global_index = 0
+        commit_interval = 1000  # 每1000条 commit 一次
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist()
+
+            for i in range(len(obs) - 1):
+
+                v_now = obs[i]
+                v_next = obs[i + 1]
+
+                a = action_id[i]
+                r = rewards[i]
+                d = dones[i]
+
+                # ---------- 提取特征 ----------
+                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                depth_now = torch.from_numpy(v_now['depth']).float()
+                audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
+
+                rgb_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                depth_next = torch.from_numpy(v_next['depth']).float()
+                audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
+
+                if i == 0:
+                    pre_rgb = torch.zeros_like(rgb_now)
+                    pre_depth = torch.zeros_like(depth_now)
+
+                trgb = torch.cat([pre_rgb, rgb_now], dim=2)
+                tdepth = torch.cat([pre_depth, depth_now], dim=2)
+                trgb_next = torch.cat([rgb_now, rgb_next], dim=2)
+                tdepth_next = torch.cat([depth_now, depth_next], dim=2)
+
+                pre_rgb = rgb_now
+                pre_depth = depth_now
+
+                # ⚠️ 必须保证是 CPU tensor
+                sample = {
+                    "state": (
+                        audio_now.cpu(),
+                        trgb.cpu(),
+                        tdepth.cpu()
+                    ),
+                    "next_state": (
+                        audio_next.cpu(),
+                        trgb_next.cpu(),
+                        tdepth_next.cpu()
+                    ),
+                    "action": torch.tensor(a, dtype=torch.long),
+                    "reward": torch.tensor(r, dtype=torch.float),
+                    "done": torch.tensor(d, dtype=torch.bool)
+                }
+
+                key = f"{global_index:08d}".encode()
+                txn.put(key, pickle.dumps(sample))
+
+                global_index += 1
+
+                # ---------- 定期 commit ----------
+                if global_index % commit_interval == 0:
+                    txn.commit()
+                    txn = env.begin(write=True)
+
+        txn.commit()
+        env.sync()
+        env.close()
+
+        print(f"LMDB 写入完成，总样本数: {global_index}")
+    
+    @classmethod
+    def load_offline_with_hybrid_lmdb_chunked_store(cls, path, config):
+
+        CHUNK_SIZE = config.LMDB.CHUNK_SIZE
+
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        map_size = 1024 ** 3 * 200  # 200G
+
+        env = lmdb.open(
+            config.LMDB.TO_PATH,
+            map_size=map_size,
+            subdir=True,
+            meminit=False,
+            map_async=True
+        )
+
+        txn = env.begin(write=True)
+
+        # ===== 全局 buffer =====
+        buffer = {
+            "state_audio": [],
+            "state_rgb": [],
+            "state_depth": [],
+            "next_audio": [],
+            "next_rgb": [],
+            "next_depth": [],
+            "action": [],
+            "reward": [],
+            "done": []
+        }
+
+        chunk_id = 0
+
+        for file in tqdm(files, desc="Building Cross-Episode Chunked LMDB"):
+
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1)
+            rewards = np.array(data['reward']).reshape(-1)
+            dones = np.array(data['done']).reshape(-1)
+
+            T = len(obs)
+
+            # ---------- 构造 episode tensor ----------
+
+            rgb = torch.stack([
+                torch.from_numpy(o['rgb']).float() / 255.0
+                for o in obs
+            ])
+
+            depth = torch.stack([
+                torch.from_numpy(o['depth']).float()
+                for o in obs
+            ])
+
+            audio = torch.stack([
+                torch.from_numpy(o['spectrogram'][0]).float()
+                for o in obs
+            ])
+
+            rgb_prev = torch.zeros_like(rgb)
+            depth_prev = torch.zeros_like(depth)
+
+            rgb_prev[1:] = rgb[:-1]
+            depth_prev[1:] = depth[:-1]
+
+            trgb = torch.cat([rgb_prev, rgb], dim=3)
+            tdepth = torch.cat([depth_prev, depth], dim=3)
+
+            trgb_next = trgb[1:]
+            tdepth_next = tdepth[1:]
+            audio_next = audio[1:]
+
+            trgb = trgb[:-1]
+            tdepth = tdepth[:-1]
+            audio = audio[:-1]
+
+            action = torch.from_numpy(action_id).long()
+            reward = torch.from_numpy(rewards).float()
+            done = torch.from_numpy(dones).bool()
+
+            N = trgb.shape[0]
+            # ===== 逐 step 加入全局 buffer =====
+            for i in range(N):
+
+                buffer["state_audio"].append(audio[i])
+                buffer["state_rgb"].append(trgb[i])
+                buffer["state_depth"].append(tdepth[i])
+
+                buffer["next_audio"].append(audio_next[i])
+                buffer["next_rgb"].append(trgb_next[i])
+                buffer["next_depth"].append(tdepth_next[i])
+
+                buffer["action"].append(action[i])
+                buffer["reward"].append(reward[i])
+                buffer["done"].append(done[i])
+
+                # ===== 满 chunk 才写 =====
+                if len(buffer["action"]) >= CHUNK_SIZE:
+
+                    chunk = {
+                        k: torch.stack(v).cpu()
+                        for k, v in buffer.items()
+                    }
+
+                    key = f"{chunk_id:08d}".encode()
+                    txn.put(key, pickle.dumps(chunk))
+
+                    chunk_id += 1
+
+                    # 清空 buffer
+                    for k in buffer:
+                        buffer[k] = []
+
+                    if chunk_id % 100 == 0:
+                        txn.commit()
+                        txn = env.begin(write=True)
+
+        # ===== 写入剩余不足 CHUNK_SIZE 的部分 =====
+        if len(buffer["action"]) > 0:
+
+            chunk = {
+                k: torch.stack(v).cpu()
+                for k, v in buffer.items()
+            }
+
+            key = f"{chunk_id:08d}".encode()
+            txn.put(key, pickle.dumps(chunk))
+
+        txn.commit()
+        env.sync()
+        env.close()
+    
     @classmethod
     def load_lmdb_offline_rl(cls, paths):
         """
@@ -656,6 +991,108 @@ class LoadLmdb:
             }, shard_path)
             print(f"保存 shard {shard_id}, size={len(buffer_states)}")
     @classmethod
+    def load_offline_with_hybrid(cls , path , config):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
+
+        shard_size = 10000  # 每个shard包含的样本数
+        shard_id = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id = np.array(data['action_id']).reshape(-1).tolist()
+            rewards = np.array(data['reward']).reshape(-1).tolist()
+            dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+    
+            # if data['info'][0]['distance_to_goal'] > 5 :
+            #     tqdm.write(f"{data['info'][0]['distance_to_goal']} drop")
+            #     continue
+            # 遍历每一对 (state, next_state)
+            for i in range(len(obs) - 1):
+                v_now = obs[i]
+                v_next = obs[i + 1]
+                a = action_id[i]
+                r = rewards[i]
+                d = dones[i]
+
+                # 提取特征
+                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
+                depth_now = torch.from_numpy(v_now['depth']).float() 
+                audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
+                rgb_next = torch.from_numpy(v_next['rgb']).float() / 255.0
+                depth_next = torch.from_numpy(v_next['depth']).float()
+                audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
+                if i == 0:
+                    # 如果是第一个step ， 则在前面填充0
+                    pre_rgb = torch.zeros_like(rgb_now)
+                    pre_depth = torch.zeros_like(depth_now)
+                    
+                    trgb = torch.cat([pre_rgb , rgb_now] , dim = 2)
+                    tdepth = torch.cat([pre_depth , depth_now] , dim = 2)
+                    trgb_next =  torch.cat([rgb_now , rgb_next] , dim = 2 )
+                    tdepth_next = torch.cat([depth_now , depth_next] , dim = 2)
+                    pre_rgb = rgb_now
+                    pre_depth = depth_now
+                else:
+                    trgb = torch.cat([pre_rgb , rgb_now] , dim = 2)
+                    tdepth = torch.cat([pre_depth , depth_now] , dim = 2)
+                    trgb_next =  torch.cat([rgb_now , rgb_next] , dim = 2 )
+                    tdepth_next = torch.cat([depth_now , depth_next] , dim = 2)
+                    pre_rgb = rgb_now
+                    pre_depth = depth_now
+                
+                # 编码成状态向量
+                # with torch.no_grad():
+                #     state = model.embedding_forward(audio_now.to(model.device), trgb.to(model.device) , tdepth.to(model.device))
+                #     next_state = model.embedding_forward(audio_next.to(model.device), trgb_next.to(model.device) , tdepth_next.to(model.device))
+                state = (audio_now , trgb , tdepth)
+                next_state = (audio_next , trgb_next , tdepth_next)
+
+                buffer_states.append(state)
+                buffer_next_states.append(next_state)
+                buffer_actions.append(torch.tensor(a, dtype=torch.long))
+                buffer_rewards.append(torch.tensor(r, dtype=torch.float))
+                buffer_dones.append(torch.tensor(d, dtype=torch.bool))
+
+                # 存 shard
+                if len(buffer_states) >= shard_size:
+                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
+                    torch.save({
+                        'states': torch.stack(buffer_states),
+                        'next_states': torch.stack(buffer_next_states),
+                        # 'states':buffer_states,
+                        # 'next_states':buffer_next_states,
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+
+                    # 清空缓存
+                    buffer_states, buffer_next_states = [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
+                    shard_id += 1
+
+        # 保存最后一个不满的 shard
+        if buffer_states:
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
+            torch.save({
+                'states': torch.stack(buffer_states),
+                'next_states': torch.stack(buffer_next_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+    @classmethod
     def load_offline(cls, path, model, config):
         """
 
@@ -897,6 +1334,70 @@ class VADE_Offline(Dataset):
         r = pickle.loads(length)
         return r
 
+# class HybridOfflineDataset(Dataset):
+
+#     def __init__(self, lmdb_path):
+#         self.env = lmdb.open(
+#             lmdb_path,
+#             readonly=True,
+#             lock=False,
+#             readahead=False
+#         )
+#         with self.env.begin() as txn:
+#             self.length = txn.stat()["entries"]
+
+#     def __len__(self):
+#         return self.length
+
+#     def __getitem__(self, idx):
+#         with self.env.begin() as txn:
+#             key = f"{idx:08d}".encode()
+#             sample = pickle.loads(txn.get(key))
+#         return (
+#                 sample["state"],
+#                 sample["next_state"],
+#                 sample["action"],
+#                 sample["reward"],
+#                 sample["done"]
+#             )
+class HybridOfflineDataset(Dataset):
+
+    def __init__(self, lmdb_path):
+        self.lmdb_path = lmdb_path
+        self.env = None
+        self.txn = None
+        self.length = None
+
+    def _init_db(self):
+        self.env = lmdb.open(
+            self.lmdb_path,
+            readonly=True,
+            lock=False,
+            readahead=False,
+            max_readers=512
+        )
+        self.txn = self.env.begin()
+        self.length = self.txn.stat()["entries"]
+
+    def __len__(self):
+        if self.length is None:
+            self._init_db()
+        return self.length
+
+    def __getitem__(self, idx):
+        if self.env is None:
+            self._init_db()
+
+        key = f"{idx:08d}".encode()
+        sample = pickle.loads(self.txn.get(key))
+
+        return (
+            sample["state"],
+            sample["next_state"],
+            sample["action"],
+            sample["reward"],
+            sample["done"]
+        )
 
 class ShardedPTDataset(Dataset):
     def __init__(self, shard_pattern, preload=True):

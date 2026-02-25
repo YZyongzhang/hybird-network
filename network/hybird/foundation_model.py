@@ -217,27 +217,27 @@ class Network(nn.Module):
             rgb = rgb.unsqueeze(0)
         if len(depth.shape) == 3:
             depth = depth.unsqueeze(0)
-        if len(pre_rgb.shape) == 3:
-            pre_rgb = pre_rgb.unsqueeze(0)
-        if len(pre_depth.shape) == 3:
-            pre_depth = pre_depth.unsqueeze(0)
+        # if len(pre_rgb.shape) == 3:
+        #     pre_rgb = pre_rgb.unsqueeze(0)
+        # if len(pre_depth.shape) == 3:
+        #     pre_depth = pre_depth.unsqueeze(0)
         rgb = rgb.permute(0,3, 1, 2)
         depth = depth.permute(0,3, 1, 2)
-        pre_rgb = pre_rgb.permute(0,3, 1, 2)
-        pre_depth = pre_depth.permute(0,3, 1, 2)
+        # pre_rgb = pre_rgb.permute(0,3, 1, 2)
+        # pre_depth = pre_depth.permute(0,3, 1, 2)
 
         # rgb = rgb.permute(0,3, 1, 2)
         # depth = depth.permute(0,3, 1, 2)
 
         rgbd = torch.cat([rgb, depth], dim=1)
-        pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
-        total = torch.cat([rgbd , pre_rgbd] , dim=1)
+        # pre_rgbd = torch.cat([pre_rgb, pre_depth], dim=1)
+        # total = torch.cat([rgbd , pre_rgbd] , dim=1)
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         
         
         with torch.no_grad():
             audio_encoder = self.audio_encoder.encoder_forward(audio)
-        visual_cnn = self.visual_encoder(total)
+        visual_cnn = self.visual_encoder(rgbd)
         v_batch , v_dim , v_h , v_w = visual_cnn.shape
         visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)
         v_position = self.add_position(visual_cnn)

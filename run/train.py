@@ -1,5 +1,5 @@
 from train import VADE
-from train import ShardedPTDataset , ShardedPTDatasetOffline ,ShardedPTDatasetOfflineBuffer
+from train import ShardedPTDataset , ShardedPTDatasetOffline ,ShardedPTDatasetOfflineBuffer , HybridOfflineDataset
 import torch
 import torch.optim as optim
 import torch
@@ -20,10 +20,13 @@ def Train(model ,trainer , config , device = None , **kwargs):
             if config.buffer:
                 train_dataset = ShardedPTDatasetOfflineBuffer(train_json=config.train_shard_pattern)
             else:
-                train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
+                # train_dataset = ShardedPTDatasetOffline(train_json=config.train_shard_pattern)
+                train_dataset = HybridOfflineDataset(
+                                    lmdb_path=config.train_lmdb_path
+                                )
         print(train_dataset.__len__())
         import pdb;pdb.set_trace()
-        train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True ,  pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True ,  num_workers=10 , pin_memory=True)
         if config.SAVE_LOADER:
             with open('train_loader.pkl' , 'wb') as f:
                 pickle.dump(train_loader , f)

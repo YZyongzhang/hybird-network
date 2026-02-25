@@ -23,7 +23,7 @@ class PolicyNet(torch.nn.Module):
     def forward(self, x):
         if len(x.shape) < 2: # batch , dim
             x = x.unsqueeze(0)
-        x = self.down(x)
+        # x = self.down(x)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return F.softmax(x, dim=1)
@@ -42,7 +42,7 @@ class QValueNet(torch.nn.Module):
             nn.LayerNorm(256),
         )
     def forward(self, x):
-        x = self.down(x)
+        # x = self.down(x)
         x = F.relu(self.fc1(x))
         return self.fc2(x)
 class SAC_Hybird_model(torch.nn.Module):
@@ -51,7 +51,7 @@ class SAC_Hybird_model(torch.nn.Module):
                  alpha_lr, target_entropy, tau, gamma, beta ,device):
         super(SAC_Hybird_model, self).__init__()
         self.hybird = HybirdNetwork().to(device)
-        self.hybird.load_state_dict(torch.load("compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"))
+        self.hybird.load_state_dict(torch.load("heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"))
         self.hybird.train()
         self.hybird_optimizer = torch.optim.Adam(self.hybird.parameters(),
                             lr= actor_lr / 10)
@@ -89,6 +89,8 @@ class SAC_Hybird_model(torch.nn.Module):
 
     def get_action(self, state):
         # state = torch.tensor([state], dtype=torch.float).to(self.device)
+        audio , rgb , depth = state
+        state = self.hybird.embedding_forward(audio.to(self.device) , rgb.to(self.device) , depth.to(self.device)).float()
         probs = self.actor(state)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
@@ -117,7 +119,6 @@ class SAC_Hybird_model(torch.nn.Module):
                                     param.data * self.tau)
 
     def update(self, states, actions, rewards, next_states, dones):
-
         audio , rgb , depth = states
         audio_next , rgb_next , depth_next = next_states
         states = self.hybird.embedding_forward(audio.to(self.device) , rgb.to(self.device) , depth.to(self.device)).float()

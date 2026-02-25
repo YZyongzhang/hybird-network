@@ -26,8 +26,17 @@ if __name__ == "__main__":
         loadlmdb_config = task_config.LMDB
         from train import LoadLmdb
         logger.info(loadlmdb_config)
+        
         if loadlmdb_config.TYPE == "HybirdNetwork":
             LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
+        elif loadlmdb_config.TYPE == "OfflineTwoFrameWithHybridLMDB":
+            from network import HybirdNetwork
+            import torch
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = HybirdNetwork().to(device)
+            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.eval()
+            LoadLmdb.load_offline_with_hybrid_lmdb_chunked_store(loadlmdb_config.RAW_DATA_PATH , config=task_config)
         elif loadlmdb_config.TYPE == "HybirdNetworkTwoFrame":
             LoadLmdb.load_two_frame_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
         elif loadlmdb_config.TYPE == "offline":

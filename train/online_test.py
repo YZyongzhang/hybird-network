@@ -99,7 +99,8 @@ class OnlineTest:
                 pre_rgb = rgb
                 pre_depth = depth
             while not done or step < 200:
-                obs , reward , done , info = self.env.step(action=action_sac)
+                # obs , reward , done , info = self.env.step(action=action_sac)
+                obs , reward , done , info = self.env.step(action=action_hybird)
                 logger.info(f"take action sac model {action_sac}, take action hybird model {action_hybird} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
                 
                 with torch.no_grad():
@@ -112,6 +113,59 @@ class OnlineTest:
                     action_hybird = self.hybirdmodel(audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda'))
                     action_sac = sac_model.get_action(state.to('cuda'))
                     action_hybird = action_hybird.argmax(dim=1).item()
+                    pre_rgb = rgb
+                    pre_depth = depth
+                step +=1
+                epsiode_reward +=reward
+                if done or step >= 200:
+                    logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
+                    top_down_map = plot_top_down_map(info)
+                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
+                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
+                    os.makedirs(f"./spl/{epoch}" , exist_ok=True)
+                    Image.fromarray(top_down_map).save(f"./spl/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
+                    break
+            total_reward +=  epsiode_reward
+            spl += info['spl']
+            
+        return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
+    def rollout_hybrid_offline(self , epoch , sac_model , logger):
+        total_reward = 0
+        spl = 0
+        
+        for _ in tqdm(range(self.env._env.number_of_episodes),desc="onlinetest"):
+            scene = self.env._env.current_episode.scene_id[-15:-4] 
+            episode_id = self.env._env.current_episode.episode_id
+            path = f"img/{scene}_{episode_id}"
+            os.makedirs(path , exist_ok=True)
+            
+            logger.info(f"scene is {scene}  , episodeid is {episode_id}")
+            epsiode_reward = 0            
+            obs = self.env.reset()
+            done = False
+            step = 0
+            with torch.no_grad():
+                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                depth = torch.from_numpy(obs['depth']).float()
+                audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                pre_rgb = torch.zeros_like(rgb)
+                pre_depth = torch.zeros_like(depth)
+                trgb = torch.cat([pre_rgb , rgb] , dim=2)
+                tdepth = torch.cat([pre_depth , depth] , dim=2)
+                action_sac = sac_model.get_action((audio.to('cuda') , trgb.to('cuda') , tdepth.to('cuda')))
+                pre_rgb = rgb
+                pre_depth = depth
+            while not done or step < 200:
+                obs , reward , done , info = self.env.step(action=action_sac)
+                logger.info(f"take action sac model {action_sac} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
+                
+                with torch.no_grad():
+                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+                    depth = torch.from_numpy(obs['depth']).float()
+                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                    trgb = torch.cat([pre_rgb , rgb] , dim=2)
+                    tdepth = torch.cat([pre_depth , depth] , dim=2)
+                    action_sac = sac_model.get_action((audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda')))
                     pre_rgb = rgb
                     pre_depth = depth
                 step +=1
@@ -288,6 +342,8 @@ class OnlineTest:
     def rollout(self , epoch , sac_model , logger):
         if self.config.model == "v1":
             return self.rollout_two_frame(epoch , sac_model , logger)
+        elif self.config.model == "v1_3":
+            return self.rollout_hybrid_offline(epoch , sac_model , logger)
         elif self.config.model == 'v2':
             return self.rollout_two_frame(epoch , sac_model , logger)
         elif self.config.model == 'v4':

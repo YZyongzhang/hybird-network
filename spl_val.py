@@ -13,7 +13,8 @@ task_config = config.TASK_CONFIG
 train_config = task_config.TRAIN
 offline_config  = train_config.OFFLINE
 
-HybirdNetwork_path = "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
+# HybirdNetwork_path = "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
+HybirdNetwork_path = 'hu/heard/hybird_ckpt/model_epoch_100.pth'
 sac_model_path = './offlineRL/ckpt/finnal_weak/26/sac_2level_model_1000.pth'
 
 
@@ -43,7 +44,7 @@ sac_model = SAC_model(
     beta=beta,
     device=device
 )
-sac_model.load_state_dict(torch.load(sac_model_path))
+# sac_model.load_state_dict(torch.load(sac_model_path))
 sac_model.eval()
 online = OnlineTest(env=env,hybirdmodel=hybird , config=offline_config)
 reward , spl = online.rollout('sac',sac_model , logger)

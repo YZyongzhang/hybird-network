@@ -5,6 +5,7 @@ dataset/
 *.pkl
 HybridNetworkStoreOldExperiment/
 HybirdNetworkCkpt/
+heard_unheard/
 *.txt
 *.pth
 exp/
