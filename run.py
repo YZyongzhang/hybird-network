@@ -22,65 +22,65 @@ if __name__ == "__main__":
         logger.info(f"collect {task_config.COLLECT.TYPE} beggining")
         Collect(collecter=collecter)
     
-    elif task_config.LMDB.OPEN :
-        loadlmdb_config = task_config.LMDB
-        from train import LoadLmdb
-        logger.info(loadlmdb_config)
-        
-        if loadlmdb_config.TYPE == "HybirdNetwork":
-            LoadLmdb.load_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
-        elif loadlmdb_config.TYPE == "OfflineTwoFrameWithHybridLMDB":
+    elif task_config.PT.OPEN :
+        pt_config = task_config.PT
+        from train.VADE import LoadLmdb
+        logger.info(pt_config)
+
+        if pt_config.TYPE == "HybirdNetwork":
+            LoadLmdb.load_pt(pt_config.RAW_DATA_PATH, pt_config)
+        elif pt_config.TYPE == "OfflineTwoFrameWithHybridPT":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_with_hybrid_lmdb(loadlmdb_config.RAW_DATA_PATH , config=task_config)
-        elif loadlmdb_config.TYPE == "OfflineWithHybridPT":
-            LoadLmdb.load_offline_with_hybrid(loadlmdb_config.RAW_DATA_PATH, config=task_config)
-        elif loadlmdb_config.TYPE == "HybirdNetworkTwoFrame":
-            LoadLmdb.load_two_frame_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
-        elif loadlmdb_config.TYPE == "offline":
+            LoadLmdb.load_offline_two_frame(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+        elif pt_config.TYPE == "OfflineWithHybridPT":
+            LoadLmdb.load_offline_with_hybrid(pt_config.RAW_DATA_PATH, config=pt_config)
+        elif pt_config.TYPE == "HybirdNetworkTwoFrame":
+            LoadLmdb.load_two_frame_pt(pt_config.RAW_DATA_PATH, pt_config)
+        elif pt_config.TYPE == "offline":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
-        elif loadlmdb_config.TYPE == "offlinetwoframe":
+            LoadLmdb.load_offline(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+        elif pt_config.TYPE == "offlinetwoframe":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_two_frame(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
-        elif loadlmdb_config.TYPE == "offlinelstm":
+            LoadLmdb.load_offline_two_frame(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+        elif pt_config.TYPE == "offlinelstm":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_lstm(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
-        elif loadlmdb_config.TYPE == "offlinelstm_by_level":
+            LoadLmdb.load_offline_lstm(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+        elif pt_config.TYPE == "offlinelstm_by_level":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_lstm_level(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
-        elif loadlmdb_config.TYPE == "offlinelstm_by_level_audio_visual":
+            LoadLmdb.load_offline_lstm_level(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+        elif pt_config.TYPE == "offlinelstm_by_level_audio_visual":
             from network import HybirdNetwork
             import torch
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = HybirdNetwork().to(device)
-            model.load_state_dict(torch.load(loadlmdb_config.CKPT))
+            model.load_state_dict(torch.load(pt_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_lstm_level_audio_visual(loadlmdb_config.RAW_DATA_PATH , model= model, config=task_config)
+            LoadLmdb.load_offline_lstm_level_audio_visual(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
 
     elif task_config.EVAL.OPEN:
         eval_config = task_config.EVAL

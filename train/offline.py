@@ -267,64 +267,37 @@ class OfflineAndHybird:
         self.debug_lmdb_profile_every = int(getattr(config, "DEBUG_LMDB_PROFILE_EVERY", 1))
         self.num_workers = int(getattr(config, "NUM_WORKERS", 0))
 
-    def _log_lmdb_profile(self, global_step, batch_fetch_time):
-        # if not self.debug_lmdb_profile:
-        #     return
-        # if self.debug_lmdb_profile_every <= 0:
-        #     return
-        # if global_step % self.debug_lmdb_profile_every != 0:
-        #     return
-        # if self.num_workers != 0:
-        #     tqdm.write(
-        #         "[LMDBProfile] NUM_WORKERS>0 时 dataset 计时在子进程，主进程无法准确统计。请临时设为 0。"
-        #     )
-        #     return
-        # if not hasattr(self.dataset, "get_profile_stats"):
-        #     return
-        stats = self.dataset.get_profile_stats()
-        lmdb_get_t = float(stats.get("lmdb_get_time", 0.0))
-        pickle_t = float(stats.get("pickle_time", 0.0))
-        getitem_t = float(stats.get("getitem_time", 0.0))
-        calls = int(stats.get("getitem_calls", 0))
-        if calls <= 0:
-            return
-        fetch_t = max(batch_fetch_time, 1e-12)
-        getitem_den = max(getitem_t, 1e-12)
-        tqdm.write(
-            f"[LMDBProfile] step={global_step} calls={calls} "
-            f"fetch={fetch_t*1000:.2f}ms get={lmdb_get_t*1000:.2f}ms "
-            f"pickle={pickle_t*1000:.2f}ms "
-            f"get/fetch={lmdb_get_t/fetch_t*100:.2f}% "
-            f"pickle/fetch={pickle_t/fetch_t*100:.2f}% "
-            f"pickle/getitem={pickle_t/getitem_den*100:.2f}%"
-        )
     def train(self):
         
         global_step = 0
         for epoch in tqdm(range(1, self.epoch + 1),desc="epoch nums"):
-            if epoch % self.config.replay_epoch == 0 and epoch != 0 and epoch < 50:
+            if (
+                hasattr(self.dataset, "replay")
+                and epoch % self.config.replay_epoch == 0
+                and epoch != 0
+                and epoch < 50
+            ):
                 self.dataset.replay(logger)
-                self.dataloader = DataLoader(self.dataset, batch_size=self.config.batch_size, shuffle=True ,  pin_memory=True)
-            data_iter = iter(self.dataloader)
-            for _ in range(len(self.dataloader)):
-                if self.debug_lmdb_profile and hasattr(self.dataset, "reset_profile_stats"):
-                    self.dataset.reset_profile_stats()
-                t_fetch_start = time.perf_counter()
-                batch = next(data_iter)
-                batch_fetch_time = time.perf_counter() - t_fetch_start
-                
+                self.dataloader = DataLoader(
+                    self.dataset,
+                    batch_size=self.config.batch_size,
+                    shuffle=True,
+                    num_workers=int(getattr(self.config, "NUM_WORKERS", 0)),
+                    pin_memory=True,
+                )
+
+            for batch in self.dataloader:
                 global_step += 1
 
                 # batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
                 states , next_states , actions , rewards , dones = batch
 
                 loss_dict = self.agent.update(states, actions , rewards, next_states ,  dones)
-                self._log_lmdb_profile(global_step=global_step, batch_fetch_time=batch_fetch_time)
 
                 for key, value in loss_dict.items():
                     self.writer.add_scalar(f"scalar/{key}", value, global_step=global_step)
-                # if global_step % self.log_interval == 0:
-                tqdm.write(
+                if global_step % self.log_interval == 0:
+                    tqdm.write(
                         f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
                         f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
                     )

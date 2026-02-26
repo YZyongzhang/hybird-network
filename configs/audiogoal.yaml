@@ -46,7 +46,7 @@ COLLECT:
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   # TYPE: "HybirdNetwork"
@@ -70,21 +70,13 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "final/telephone/ckpt/8"
     # train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     # train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
-    train_shard_pattern: "dataset-data3/dataset/offline/pt/v10/train.json"
-    train_lmdb_path: "media/lmdb/offline_with_hybrid"
-    USE_CHUNKED_LMDB: False
+    train_shard_pattern: "media/pt/offline_with_hybrid"
+    
+    RANDOM_SHARD_RELOAD: True
+    RANDOM_SHARDS_PER_EPOCH: 3
+    RELOAD_SHARDS_EVERY_EPOCHS: 10
+    RANDOM_SHARD_SEED: 0
     PREFETCH_FACTOR: 2
-    CHUNK_AWARE_BATCH: False
-    CHUNK_WINDOW_BATCH: False
-    CHUNK_WINDOW_SIZE: 8
-    CHUNK_WINDOW_LOG: True
-    CHUNK_WINDOW_LOG_EVERY: 20
-    CHUNKS_PER_EPOCH: 32
-    SHUFFLE_CHUNKS: True
-    CHUNK_REPLACE_RATIO: 0.2
-    LOG_CHUNK_LOADING: True
-    PROFILE_CHUNK_TIME: True
-    LMDB_READAHEAD: True
     NUM_WORKERS: 0
     PERSISTENT_WORKERS: True
     log_interval: 1
@@ -98,7 +90,7 @@ TRAIN:
     tau: 0.005
     beta: 0.001
     gamma: 0.99
-    batch_size: 128
+    batch_size: 1024
     num_epochs : 300
     online_test_epoch : 1
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
@@ -113,8 +105,8 @@ EVAL:
   SEED: 0
   STOCHASTIC_SAC: False
 
-LMDB:
-  OPEN: True
+PT:
+  OPEN: False
   TYPE: "OfflineWithHybridPT"
   CHUNK_SIZE: 512
   SHARD_SIZE: 10000

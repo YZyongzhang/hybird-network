@@ -38,7 +38,7 @@ def benchmark_multi(pattern, repeat, map_location, limit):
         total_size += size_bytes * repeat
         for _ in range(repeat):
             t0 = time.perf_counter()
-            _ = torch.load(f, map_location=map_location)
+            _ = torch.load(f, map_location=map_location ,_use_new_zipfile_serialization=True)
             total_time += time.perf_counter() - t0
             total_count += 1
 
