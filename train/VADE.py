@@ -8,6 +8,8 @@ import torch
 import numpy as np
 import random
 import glob
+import bisect
+import gc
 class LoadLmdb:
 
     def __init__(self, path):
@@ -972,7 +974,7 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
 
         self.active_shard_files = []
         self.active_shards = []
-        self.index_map = []
+        self.cumulative_sizes = []
         self.total_size = 0
         self._reload_shards(initial=True)
 
@@ -1003,8 +1005,14 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
             selected = self._rng_sample(self.shard_files, target)
 
         self.active_shard_files = selected
+        # 先释放上一轮缓存，避免 reload 时内存峰值叠加
+        old_shards = self.active_shards
         self.active_shards = []
-        self.index_map = []
+        self.cumulative_sizes = []
+        if old_shards:
+            old_shards.clear()
+            del old_shards
+            gc.collect()
 
         total = 0
         for active_id, shard_file in enumerate(self.active_shard_files):
@@ -1016,11 +1024,10 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
             self.active_shards.append(data)
             size = len(data["actions"])
             total += size
+            self.cumulative_sizes.append(total)
             print(
                 f"[RandomReloadShardedPTDatasetOffline] active shard {active_id} samples={size}"
             )
-            for i in range(size):
-                self.index_map.append((active_id, i))
 
         self.total_size = total
         phase = "initial" if initial else "reload"
@@ -1038,7 +1045,13 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
         return self.total_size
 
     def __getitem__(self, index):
-        active_id, local_idx = self.index_map[index]
+        if index < 0:
+            index += self.total_size
+        if index < 0 or index >= self.total_size:
+            raise IndexError(index)
+        active_id = bisect.bisect_right(self.cumulative_sizes, index)
+        prev_end = 0 if active_id == 0 else self.cumulative_sizes[active_id - 1]
+        local_idx = index - prev_end
         data = self.active_shards[active_id]
 
         if self.use_attention:

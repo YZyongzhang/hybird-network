@@ -130,58 +130,78 @@ class OnlineTest:
             
         return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
     def rollout_hybrid_offline(self , epoch , sac_model , logger):
-        total_reward = 0
-        spl = 0
-        
-        for _ in tqdm(range(self.env._env.number_of_episodes),desc="onlinetest"):
-            scene = self.env._env.current_episode.scene_id[-15:-4] 
-            episode_id = self.env._env.current_episode.episode_id
-            path = f"img/{scene}_{episode_id}"
-            os.makedirs(path , exist_ok=True)
-            
-            logger.info(f"scene is {scene}  , episodeid is {episode_id}")
-            epsiode_reward = 0            
+        total_reward = 0.0
+        total_spl = 0.0
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        max_steps = int(getattr(self.config, "MAX_STEPS", 200))
+        num_eps = int(self.env._env.number_of_episodes)
+
+        def _to_env_action(a):
+            if isinstance(a, torch.Tensor):
+                if a.numel() == 1:
+                    return int(a.item())
+                return int(a.reshape(-1)[0].item())
+            return int(a)
+
+        for _ in tqdm(range(num_eps), desc="onlinetest"):
             obs = self.env.reset()
+            current_ep = self.env._env.current_episode
+            scene = current_ep.scene_id[-15:-4]
+            episode_id = current_ep.episode_id
+
+            logger.info(f"scene is {scene}, episodeid is {episode_id}")
+            episode_reward = 0.0
             done = False
             step = 0
+            info = {"spl": 0.0, "distance_to_goal": -1.0}
+
             with torch.no_grad():
-                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-                depth = torch.from_numpy(obs['depth']).float()
-                audio = torch.from_numpy(obs['spectrogram'][0]).float()
+                rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
+                depth = torch.from_numpy(obs["depth"]).float()
+                audio = torch.from_numpy(obs["spectrogram"][0]).float()
                 pre_rgb = torch.zeros_like(rgb)
                 pre_depth = torch.zeros_like(depth)
-                trgb = torch.cat([pre_rgb , rgb] , dim=2)
-                tdepth = torch.cat([pre_depth , depth] , dim=2)
-                action_sac = sac_model.get_action((audio.to('cuda') , trgb.to('cuda') , tdepth.to('cuda')))
+                trgb = torch.cat([pre_rgb, rgb], dim=2)
+                tdepth = torch.cat([pre_depth, depth], dim=2)
+                action_sac = _to_env_action(
+                    sac_model.get_action((audio.to(device), trgb.to(device), tdepth.to(device)))
+                )
                 pre_rgb = rgb
                 pre_depth = depth
-            while not done or step < 200:
-                obs , reward , done , info = self.env.step(action=action_sac)
-                logger.info(f"take action sac model {action_sac} ,reward {reward} , step {step} , done {done} , is collided {self.sim.previous_step_collided}")
-                
+
+            while (not done) and (step < max_steps):
+                obs, reward, done, info = self.env.step(action=action_sac)
+                logger.info(
+                    f"take action sac model {action_sac}, reward {reward}, step {step}, "
+                    f"done {done}, is collided {self.sim.previous_step_collided}"
+                )
+
+                episode_reward += float(reward)
+                step += 1
+                if done or step >= max_steps:
+                    break
+
                 with torch.no_grad():
-                    rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-                    depth = torch.from_numpy(obs['depth']).float()
-                    audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                    trgb = torch.cat([pre_rgb , rgb] , dim=2)
-                    tdepth = torch.cat([pre_depth , depth] , dim=2)
-                    action_sac = sac_model.get_action((audio.to("cuda") , trgb.to('cuda') , tdepth.to('cuda')))
+                    rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
+                    depth = torch.from_numpy(obs["depth"]).float()
+                    audio = torch.from_numpy(obs["spectrogram"][0]).float()
+                    trgb = torch.cat([pre_rgb, rgb], dim=2)
+                    tdepth = torch.cat([pre_depth, depth], dim=2)
+                    action_sac = _to_env_action(
+                        sac_model.get_action((audio.to(device), trgb.to(device), tdepth.to(device)))
+                    )
                     pre_rgb = rgb
                     pre_depth = depth
-                step +=1
-                epsiode_reward +=reward
-                if done or step >= 200:
-                    logger.info(f"episode is done , distance_to_goal is {info['distance_to_goal']}, spl is {info['spl']} \nsumreward is {epsiode_reward}")
-                    top_down_map = plot_top_down_map(info)
-                    draw_point(self.sim , self.env._env.current_episode.start_position ,  top_down_map)
-                    draw_point(self.sim , self.env._env.current_episode.goals[0].position ,  top_down_map)
-                    os.makedirs(f"./spl/{epoch}" , exist_ok=True)
-                    Image.fromarray(top_down_map).save(f"./spl/{epoch}/{self.env._env.current_episode.scene_id[-15:-4]}_{self.env._env.current_episode.episode_id}.png")
-                    break
-            total_reward +=  epsiode_reward
-            spl += info['spl']
-            
-        return total_reward/self.env._env.number_of_episodes , spl / self.env._env.number_of_episodes
+
+            logger.info(
+                f"episode is done, distance_to_goal is {info.get('distance_to_goal', -1)}, "
+                f"spl is {info.get('spl', 0.0)} \nsumreward is {episode_reward}"
+            )
+
+            total_reward += episode_reward
+            total_spl += float(info.get("spl", 0.0))
+
+        return total_reward / num_eps, total_spl / num_eps
     def rollout_lstm(self , epoch , sac_model , logger):
         """
         twoframe + lstm

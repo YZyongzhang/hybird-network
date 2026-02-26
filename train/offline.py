@@ -301,16 +301,18 @@ class OfflineAndHybird:
                         f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
                         f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
                     )
-            # if epoch % 10 == 0 :
-            #     torch.save(self.agent.state_dict() , f'{self.save_dir}/sac_2level_model_{epoch}.pth')
-            # if epoch % self.online_test_epoch== 0: # 可以设置一个非常大的数进行调整曲线不进行在线测试，或者设置成使用acc进行简单的判断
-            #     # train_acc = self.val(epoch)
-            #     self.agent.eval()
-            #     online_reward  , spl = self.online_test.rollout(epoch , self.agent ,logger )
-            #     self.agent.train()
-            #     # self.writer.add_scalar("Val/train_Accuracy", train_acc, global_step=epoch)
-            #     self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
-            #     self.writer.add_scalar("Val/spl", spl, global_step=epoch)
+            if epoch % 1 == 0:
+                torch.save(self.agent.state_dict(), f"{self.save_dir}/sac_hybrid_model_{epoch}.pth")
+            if (
+                self.online_test is not None
+                and self.online_test_epoch > 0
+                and epoch % self.online_test_epoch == 0
+            ):
+                self.agent.eval()
+                online_reward, spl = self.online_test.rollout(epoch, self.agent, logger)
+                self.agent.train()
+                self.writer.add_scalar("Val/online_reward", online_reward, global_step=epoch)
+                self.writer.add_scalar("Val/spl", spl, global_step=epoch)
             if hasattr(self.dataset, "on_epoch_end"):
                 self.dataset.on_epoch_end()
                 self.dataloader = DataLoader(

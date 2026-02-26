@@ -73,7 +73,7 @@ TRAIN:
     train_shard_pattern: "media/pt/offline_with_hybrid"
     
     RANDOM_SHARD_RELOAD: True
-    RANDOM_SHARDS_PER_EPOCH: 3
+    RANDOM_SHARDS_PER_EPOCH: 4
     RELOAD_SHARDS_EVERY_EPOCHS: 10
     RANDOM_SHARD_SEED: 0
     PREFETCH_FACTOR: 2
@@ -90,7 +90,7 @@ TRAIN:
     tau: 0.005
     beta: 0.001
     gamma: 0.99
-    batch_size: 1024
+    batch_size: 512
     num_epochs : 300
     online_test_epoch : 1
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
