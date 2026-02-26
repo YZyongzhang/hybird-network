@@ -36,7 +36,9 @@ if __name__ == "__main__":
             model = HybirdNetwork().to(device)
             model.load_state_dict(torch.load(loadlmdb_config.CKPT))
             model.eval()
-            LoadLmdb.load_offline_with_hybrid_lmdb_chunked_store(loadlmdb_config.RAW_DATA_PATH , config=task_config)
+            LoadLmdb.load_offline_with_hybrid_lmdb(loadlmdb_config.RAW_DATA_PATH , config=task_config)
+        elif loadlmdb_config.TYPE == "OfflineWithHybridPT":
+            LoadLmdb.load_offline_with_hybrid(loadlmdb_config.RAW_DATA_PATH, config=task_config)
         elif loadlmdb_config.TYPE == "HybirdNetworkTwoFrame":
             LoadLmdb.load_two_frame_pt(task_config.LMDB.RAW_DATA_PATH , task_config)
         elif loadlmdb_config.TYPE == "offline":

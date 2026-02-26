@@ -995,28 +995,50 @@ class LoadLmdb:
     def load_offline_with_hybrid(cls , path , config):
         files = cls.get_files(path=path)
         random.shuffle(files)
-
         os.makedirs(config.LMDB.TO_PATH, exist_ok=True)
 
-        shard_size = 10000  # 每个shard包含的样本数
+        shard_size = int(getattr(config.LMDB, "SHARD_SIZE", 10000))
         shard_id = 0
+        total_samples = 0
 
         buffer_states, buffer_next_states = [], []
         buffer_actions, buffer_rewards, buffer_dones = [], [], []
 
-        for file in tqdm(files, desc="Loading offline RL data"):
-            with open(file, 'rb') as f:
+        def flush_shard():
+            nonlocal shard_id, total_samples
+            if len(buffer_states) == 0:
+                return
+            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
+            torch.save(
+                {
+                    # state 是 (audio, trgb, tdepth) tuple，按 list 保存避免错误 stack
+                    "states": list(buffer_states),
+                    "next_states": list(buffer_next_states),
+                    "actions": torch.stack(buffer_actions),
+                    "rewards": torch.stack(buffer_rewards),
+                    "dones": torch.stack(buffer_dones),
+                },
+                shard_path,
+                _use_new_zipfile_serialization=True
+            )
+            total_samples += len(buffer_states)
+            print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+            shard_id += 1
+            buffer_states.clear()
+            buffer_next_states.clear()
+            buffer_actions.clear()
+            buffer_rewards.clear()
+            buffer_dones.clear()
+
+        for file in tqdm(files, desc="Loading offline RL data to PT"):
+            with open(file, "rb") as f:
                 data = pickle.load(f)
 
-            obs = data['obs']
-            action_id = np.array(data['action_id']).reshape(-1).tolist()
-            rewards = np.array(data['reward']).reshape(-1).tolist()
-            dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
-    
-            # if data['info'][0]['distance_to_goal'] > 5 :
-            #     tqdm.write(f"{data['info'][0]['distance_to_goal']} drop")
-            #     continue
-            # 遍历每一对 (state, next_state)
+            obs = data["obs"]
+            action_id = np.array(data["action_id"]).reshape(-1).tolist()
+            rewards = np.array(data["reward"]).reshape(-1).tolist()
+            dones = np.array(data["done"]).reshape(-1).tolist()
+
             for i in range(len(obs) - 1):
                 v_now = obs[i]
                 v_next = obs[i + 1]
@@ -1024,38 +1046,26 @@ class LoadLmdb:
                 r = rewards[i]
                 d = dones[i]
 
-                # 提取特征
-                rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
-                depth_now = torch.from_numpy(v_now['depth']).float() 
-                audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
-                rgb_next = torch.from_numpy(v_next['rgb']).float() / 255.0
-                depth_next = torch.from_numpy(v_next['depth']).float()
-                audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
+                rgb_now = torch.from_numpy(v_now["rgb"]).float() / 255.0
+                depth_now = torch.from_numpy(v_now["depth"]).float()
+                audio_now = torch.from_numpy(v_now["spectrogram"][0]).float()
+                rgb_next = torch.from_numpy(v_next["rgb"]).float() / 255.0
+                depth_next = torch.from_numpy(v_next["depth"]).float()
+                audio_next = torch.from_numpy(v_next["spectrogram"][0]).float()
+
                 if i == 0:
-                    # 如果是第一个step ， 则在前面填充0
                     pre_rgb = torch.zeros_like(rgb_now)
                     pre_depth = torch.zeros_like(depth_now)
-                    
-                    trgb = torch.cat([pre_rgb , rgb_now] , dim = 2)
-                    tdepth = torch.cat([pre_depth , depth_now] , dim = 2)
-                    trgb_next =  torch.cat([rgb_now , rgb_next] , dim = 2 )
-                    tdepth_next = torch.cat([depth_now , depth_next] , dim = 2)
-                    pre_rgb = rgb_now
-                    pre_depth = depth_now
-                else:
-                    trgb = torch.cat([pre_rgb , rgb_now] , dim = 2)
-                    tdepth = torch.cat([pre_depth , depth_now] , dim = 2)
-                    trgb_next =  torch.cat([rgb_now , rgb_next] , dim = 2 )
-                    tdepth_next = torch.cat([depth_now , depth_next] , dim = 2)
-                    pre_rgb = rgb_now
-                    pre_depth = depth_now
-                
-                # 编码成状态向量
-                # with torch.no_grad():
-                #     state = model.embedding_forward(audio_now.to(model.device), trgb.to(model.device) , tdepth.to(model.device))
-                #     next_state = model.embedding_forward(audio_next.to(model.device), trgb_next.to(model.device) , tdepth_next.to(model.device))
-                state = (audio_now , trgb , tdepth)
-                next_state = (audio_next , trgb_next , tdepth_next)
+
+                trgb = torch.cat([pre_rgb, rgb_now], dim=2)
+                tdepth = torch.cat([pre_depth, depth_now], dim=2)
+                trgb_next = torch.cat([rgb_now, rgb_next], dim=2)
+                tdepth_next = torch.cat([depth_now, depth_next], dim=2)
+                pre_rgb = rgb_now
+                pre_depth = depth_now
+
+                state = (audio_now, trgb, tdepth)
+                next_state = (audio_next, trgb_next, tdepth_next)
 
                 buffer_states.append(state)
                 buffer_next_states.append(next_state)
@@ -1063,36 +1073,11 @@ class LoadLmdb:
                 buffer_rewards.append(torch.tensor(r, dtype=torch.float))
                 buffer_dones.append(torch.tensor(d, dtype=torch.bool))
 
-                # 存 shard
                 if len(buffer_states) >= shard_size:
-                    shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
-                    torch.save({
-                        'states': torch.stack(buffer_states),
-                        'next_states': torch.stack(buffer_next_states),
-                        # 'states':buffer_states,
-                        # 'next_states':buffer_next_states,
-                        'actions': torch.stack(buffer_actions),
-                        'rewards': torch.stack(buffer_rewards),
-                        'dones': torch.stack(buffer_dones)
-                    }, shard_path)
-                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+                    flush_shard()
 
-                    # 清空缓存
-                    buffer_states, buffer_next_states = [], []
-                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
-                    shard_id += 1
-
-        # 保存最后一个不满的 shard
-        if buffer_states:
-            shard_path = os.path.join(config.LMDB.TO_PATH, f"offline_rl_shard_{shard_id}.pt")
-            torch.save({
-                'states': torch.stack(buffer_states),
-                'next_states': torch.stack(buffer_next_states),
-                'actions': torch.stack(buffer_actions),
-                'rewards': torch.stack(buffer_rewards),
-                'dones': torch.stack(buffer_dones)
-            }, shard_path)
-            print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+        flush_shard()
+        print(f"PT 写入完成，总样本数: {total_samples}, 输出目录: {config.LMDB.TO_PATH}")
     @classmethod
     def load_offline(cls, path, model, config):
         """
@@ -1368,6 +1353,7 @@ class HybridOfflineDataset(Dataset):
         self.env = None
         self.txn = None
         self.length = None
+        self.reset_profile_stats()
 
     def _init_db(self):
         self.env = lmdb.open(
@@ -1390,7 +1376,15 @@ class HybridOfflineDataset(Dataset):
             self._init_db()
 
         key = f"{idx:08d}".encode()
-        sample = pickle.loads(self.txn.get(key))
+        t_get_start = time.perf_counter()
+        t_lmdb_get_start = time.perf_counter()
+        raw = self.txn.get(key)
+        self._profile_lmdb_get_time += time.perf_counter() - t_lmdb_get_start
+        t_pickle_start = time.perf_counter()
+        sample = pickle.loads(raw)
+        self._profile_pickle_time += time.perf_counter() - t_pickle_start
+        self._profile_getitem_time += time.perf_counter() - t_get_start
+        self._profile_getitem_calls += 1
 
         return (
             sample["state"],
@@ -1400,17 +1394,21 @@ class HybridOfflineDataset(Dataset):
             sample["done"]
         )
 
+    def reset_profile_stats(self):
+        self._profile_lmdb_get_time = 0.0
+        self._profile_pickle_time = 0.0
+        self._profile_getitem_time = 0.0
+        self._profile_getitem_calls = 0
+
+    def get_profile_stats(self):
+        return {
+            "lmdb_get_time": float(self._profile_lmdb_get_time),
+            "pickle_time": float(self._profile_pickle_time),
+            "getitem_time": float(self._profile_getitem_time),
+            "getitem_calls": int(self._profile_getitem_calls),
+        }
 
 class ChunkedHybridOfflineDataset(Dataset):
-    """
-    LMDB dataset for chunked store produced by:
-    LoadLmdb.load_offline_with_hybrid_lmdb_chunked_store
-
-    Each LMDB value is a dict with keys:
-      state_audio/state_rgb/state_depth/next_audio/next_rgb/next_depth/action/reward/done
-    where each field is a tensor of shape [chunk_size, ...].
-    """
-
     def __init__(
         self,
         lmdb_path,
@@ -1418,37 +1416,28 @@ class ChunkedHybridOfflineDataset(Dataset):
         readahead=True,
         shuffle_chunks=True,
         log_chunk_loading=True,
-        chunk_keys_cache_path=None,
         profile_chunk_time=False,
         chunk_replace_ratio=0.2,
+        chunk_size=CHUNK_SIZE,
     ):
         self.lmdb_path = lmdb_path
-        self.chunks_per_epoch = int(chunks_per_epoch)
+        self.chunks_per_epoch = max(1, int(chunks_per_epoch))
         self.readahead = bool(readahead)
         self.shuffle_chunks = bool(shuffle_chunks)
         self.log_chunk_loading = bool(log_chunk_loading)
         self.profile_chunk_time = bool(profile_chunk_time)
         self.chunk_replace_ratio = float(chunk_replace_ratio)
-        self.chunk_keys_cache_path = (
-            chunk_keys_cache_path
-            if chunk_keys_cache_path is not None
-            else os.path.join(self.lmdb_path, "__chunk_index_cache.pkl")
-        )
+        self.chunk_size = int(chunk_size)
+
         self.env = None
         self.txn = None
-        self._owner_pid = None
+        self.length = None
+        self.num_chunks = 0
+        self.active_chunk_ids = []
+        self.active_indices = []
+        self.reset_profile_stats()
 
-        # all lmdb chunk keys and epoch pointer
-        self._all_chunk_keys = []
-        self._chunk_cursor = 0
-
-        # in-memory working set for current epoch
-        self._loaded_chunks = {}
-        self._index_map = []  # list[(chunk_key, local_idx)]
-        self._loaded_size = 0
-        self._current_epoch_keys = []
-
-    def _open_env(self):
+    def _init_db(self):
         self.env = lmdb.open(
             self.lmdb_path,
             readonly=True,
@@ -1457,400 +1446,195 @@ class ChunkedHybridOfflineDataset(Dataset):
             max_readers=512,
         )
         self.txn = self.env.begin()
-        self._owner_pid = os.getpid()
+        self.length = self.txn.stat()["entries"]
+        self.num_chunks = max(1, int(np.ceil(self.length / float(self.chunk_size))))
+        self._reset_active_chunks(first_time=True)
 
-    def _init_db(self):
-        self._open_env()
-        self._all_chunk_keys = self._load_chunk_keys_cache()
-        
-        if self._all_chunk_keys is None:
-            self._all_chunk_keys = self._scan_chunk_keys()
-            self._save_chunk_keys_cache(self._all_chunk_keys)
-        if len(self._all_chunk_keys) == 0:
-            raise RuntimeError(f"No valid chunk entries found in lmdb: {self.lmdb_path}")
-        if self.shuffle_chunks:
-            random.shuffle(self._all_chunk_keys)
-        self._chunk_cursor = 0
-        init_keys = self._next_epoch_keys()
-        self._apply_loaded_epoch(*self._load_chunks_by_keys(init_keys))
+    def _reset_active_chunks(self, first_time=False):
+        if self.num_chunks <= 0:
+            self.active_chunk_ids = []
+            self.active_indices = []
+            return
 
-    def _chunk_keys_signature(self):
-        sig = {"lmdb_path": os.path.abspath(self.lmdb_path)}
-        if self.txn is not None:
-            stat = self.txn.stat()
-            sig["entries"] = int(stat.get("entries", 0))
-        data_mdb = os.path.join(self.lmdb_path, "data.mdb")
-        lock_mdb = os.path.join(self.lmdb_path, "lock.mdb")
-        if os.path.exists(data_mdb):
-            st = os.stat(data_mdb)
-            sig["data_mdb_size"] = int(st.st_size)
-            sig["data_mdb_mtime_ns"] = int(st.st_mtime_ns)
-        if os.path.exists(lock_mdb):
-            st = os.stat(lock_mdb)
-            sig["lock_mdb_size"] = int(st.st_size)
-            sig["lock_mdb_mtime_ns"] = int(st.st_mtime_ns)
-        return sig
+        target_chunks = min(self.chunks_per_epoch, self.num_chunks)
+        all_ids = list(range(self.num_chunks))
 
-    def _load_chunk_keys_cache(self):
-        if not os.path.exists(self.chunk_keys_cache_path):
-            return None
-        try:
-            with open(self.chunk_keys_cache_path, "rb") as f:
-                payload = pickle.load(f)
-            if payload.get("signature") != self._chunk_keys_signature():
-                return None
-            keys = payload.get("keys")
-            if keys is None:
-                # backward compatibility for old cache:
-                # {'signature', 'index_map', 'chunk_to_indices', 'total_size'}
-                if "chunk_to_indices" in payload:
-                    keys = list(payload["chunk_to_indices"].keys())
-                elif "index_map" in payload:
-                    seen = OrderedDict()
-                    for item in payload["index_map"]:
-                        if isinstance(item, (list, tuple)) and len(item) == 2:
-                            seen[item[0]] = True
-                    keys = list(seen.keys())
-            return keys
-        except Exception:
-            return None
-
-    def _save_chunk_keys_cache(self, keys):
-        try:
-            payload = {
-                "signature": self._chunk_keys_signature(),
-                "keys": keys,
-            }
-            with open(self.chunk_keys_cache_path, "wb") as f:
-                pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
-        except Exception:
-            pass
-
-    def _scan_chunk_keys(self):
-        keys = []
-        cursor = self.txn.cursor()
-        for key, _ in cursor:
-            keys.append(key)
-        return keys
-
-    def _load_chunk(self, txn, chunk_key):
-        t0 = time.perf_counter()
-        raw = txn.get(chunk_key)
-        get_s = time.perf_counter() - t0
-        if raw is None:
-            return None, get_s, 0.0
-        t1 = time.perf_counter()
-        chunk = pickle.loads(raw)
-        loads_s = time.perf_counter() - t1
-        if "action" not in chunk:
-            return None, get_s, loads_s
-        return chunk, get_s, loads_s
-
-    def _next_epoch_keys(self):
-        if self.chunks_per_epoch <= 0:
-            n = len(self._all_chunk_keys)
+        if first_time or not self.active_chunk_ids:
+            if self.shuffle_chunks:
+                random.shuffle(all_ids)
+            self.active_chunk_ids = all_ids[:target_chunks]
         else:
-            n = min(self.chunks_per_epoch, len(self._all_chunk_keys))
+            keep = int(round(target_chunks * (1.0 - self.chunk_replace_ratio)))
+            keep = max(0, min(keep, len(self.active_chunk_ids)))
+            kept = self.active_chunk_ids[:keep]
+            candidates = [cid for cid in all_ids if cid not in kept]
+            if self.shuffle_chunks:
+                random.shuffle(candidates)
+            self.active_chunk_ids = kept + candidates[: max(0, target_chunks - keep)]
 
-        keys = []
-        while len(keys) < n:
-            if self._chunk_cursor >= len(self._all_chunk_keys):
-                self._chunk_cursor = 0
-                if self.shuffle_chunks:
-                    random.shuffle(self._all_chunk_keys)
-            keys.append(self._all_chunk_keys[self._chunk_cursor])
-            self._chunk_cursor += 1
-        return keys
-
-    def _draw_next_keys_excluding(self, exclude_keys, k):
-        if k <= 0:
-            return []
-        exclude = set(exclude_keys)
-        out = []
-        max_scan = max(len(self._all_chunk_keys) * 2, 1)
-        scan = 0
-        while len(out) < k and scan < max_scan:
-            if self._chunk_cursor >= len(self._all_chunk_keys):
-                self._chunk_cursor = 0
-                if self.shuffle_chunks:
-                    random.shuffle(self._all_chunk_keys)
-            cand = self._all_chunk_keys[self._chunk_cursor]
-            self._chunk_cursor += 1
-            scan += 1
-            if cand in exclude or cand in out:
-                continue
-            out.append(cand)
-        return out
-
-    def _build_next_epoch_keys(self):
-        if len(self._current_epoch_keys) == 0:
-            return self._next_epoch_keys()
-        n = len(self._current_epoch_keys)
-        replace_n = int(round(n * self.chunk_replace_ratio))
-        replace_n = min(max(replace_n, 1), n)
-        keep_n = n - replace_n
         if self.shuffle_chunks:
-            keep_keys = random.sample(self._current_epoch_keys, keep_n)
-        else:
-            keep_keys = self._current_epoch_keys[:keep_n]
-        new_keys = self._draw_next_keys_excluding(keep_keys, replace_n)
-        next_keys = keep_keys + new_keys
-        if self.shuffle_chunks:
-            random.shuffle(next_keys)
-        return next_keys
+            random.shuffle(self.active_chunk_ids)
 
-    def _load_chunks_by_keys(self, selected_keys):
-        loaded_chunks = {}
-        index_map = []
-        total_get_s = 0.0
-        total_pickle_s = 0.0
-        total_extend_s = 0.0
+        active_indices = []
+        for cid in self.active_chunk_ids:
+            start = cid * self.chunk_size
+            end = min(start + self.chunk_size, self.length)
+            active_indices.extend(range(start, end))
+        self.active_indices = active_indices
+
         if self.log_chunk_loading:
             print(
-                f"[ChunkLoad] selected_chunks={len(selected_keys)} "
-                f"cursor={self._chunk_cursor}/{len(self._all_chunk_keys)}"
+                f"[ChunkedHybridOfflineDataset] active_chunks={len(self.active_chunk_ids)} "
+                f"active_samples={len(self.active_indices)} total_samples={self.length}"
             )
 
-        for i, chunk_key in enumerate(selected_keys, start=1):
-            chunk, get_s, loads_s = self._load_chunk(self.txn, chunk_key)
-            if chunk is None:
-                if self.log_chunk_loading:
-                    k = chunk_key.decode("utf-8", errors="ignore")
-                    print(f"[ChunkLoad] skip {i}/{len(selected_keys)} key={k}")
-                continue
-            loaded_chunks[chunk_key] = chunk
-            import pdb;pdb.set_trace()
-            chunk_len = int(chunk["action"].shape[0])
-            t2 = time.perf_counter()
-            index_map.extend((chunk_key, local_idx) for local_idx in range(chunk_len))
-            extend_s = time.perf_counter() - t2
-            total_get_s += get_s
-            total_pickle_s += loads_s
-            total_extend_s += extend_s
-
-            if self.log_chunk_loading:
-                k = chunk_key.decode("utf-8", errors="ignore")
-                if self.profile_chunk_time:
-                    print(
-                        f"[ChunkLoad] load {i}/{len(selected_keys)} key={k} samples={chunk_len} "
-                        f"txn_get={get_s:.4f}s pickle={loads_s:.4f}s index_extend={extend_s:.4f}s"
-                    )
-                else:
-                    print(f"[ChunkLoad] load {i}/{len(selected_keys)} key={k} samples={chunk_len}")
-
-        loaded_size = len(index_map)
-        if self.log_chunk_loading:
-            if self.profile_chunk_time:
-                print(
-                    f"[ChunkLoad] ready chunks={len(loaded_chunks)} samples={loaded_size} "
-                    f"sum_txn_get={total_get_s:.4f}s sum_pickle={total_pickle_s:.4f}s "
-                    f"sum_index_extend={total_extend_s:.4f}s"
-                )
-            else:
-                print(f"[ChunkLoad] ready chunks={len(loaded_chunks)} samples={loaded_size}")
-        return selected_keys, loaded_chunks, index_map, loaded_size
-
-    def _apply_loaded_epoch(self, selected_keys, loaded_chunks, index_map, loaded_size):
-        self._current_epoch_keys = list(selected_keys)
-        self._loaded_chunks = loaded_chunks
-        self._index_map = index_map
-        self._loaded_size = loaded_size
-
-    def on_epoch_end(self):
+    def advance_epoch_chunks(self):
         if self.env is None:
             self._init_db()
-            return
-        next_keys = self._build_next_epoch_keys()
-        self._apply_loaded_epoch(*self._load_chunks_by_keys(next_keys))
-
-    def get_chunk_groups(self):
-        if self.env is None:
-            self._init_db()
-        groups = defaultdict(list)
-        for gidx, (chunk_key, _) in enumerate(self._index_map):
-            groups[chunk_key].append(gidx)
-        return groups
+        t0 = time.time()
+        self._reset_active_chunks(first_time=False)
+        if self.profile_chunk_time:
+            print(
+                f"[ChunkedHybridOfflineDataset] chunk refresh took {time.time() - t0:.3f}s"
+            )
 
     def __len__(self):
-        if self.env is None:
+        if self.length is None:
             self._init_db()
-        return self._loaded_size
+        return len(self.active_indices)
+
+    def _load_sample(self, real_idx):
+        key = f"{real_idx:08d}".encode()
+        t_lmdb_get_start = time.perf_counter()
+        raw = self.txn.get(key)
+        self._profile_lmdb_get_time += time.perf_counter() - t_lmdb_get_start
+        if raw is None:
+            key = f"index_{real_idx}".encode("utf-8")
+            t_lmdb_get_start = time.perf_counter()
+            raw = self.txn.get(key)
+            self._profile_lmdb_get_time += time.perf_counter() - t_lmdb_get_start
+        if raw is None:
+            raise IndexError(f"Index {real_idx} not found in LMDB dataset")
+        t_pickle_start = time.perf_counter()
+        sample = pickle.loads(raw)
+        self._profile_pickle_time += time.perf_counter() - t_pickle_start
+        return sample
 
     def __getitem__(self, idx):
-        if self.env is None or self._owner_pid != os.getpid():
-            self._open_env()
-            if len(self._all_chunk_keys) == 0:
-                self._all_chunk_keys = self._load_chunk_keys_cache()
-                if self._all_chunk_keys is None:
-                    self._all_chunk_keys = self._scan_chunk_keys()
-                if self.shuffle_chunks:
-                    random.shuffle(self._all_chunk_keys)
-                self._chunk_cursor = 0
-            if self._loaded_size == 0:
-                init_keys = self._next_epoch_keys()
-                self._apply_loaded_epoch(*self._load_chunks_by_keys(init_keys))
-
-        chunk_key, local_idx = self._index_map[idx]
-        chunk = self._loaded_chunks.get(chunk_key)
-        if chunk is None:
-            # Fallback: should rarely happen unless external mutation.
-            chunk, _, _ = self._load_chunk(self.txn, chunk_key)
-            if chunk is None:
-                raise IndexError(f"Chunk key not found in lmdb: {chunk_key!r}")
-            self._loaded_chunks[chunk_key] = chunk
-
-        state = (
-            chunk["state_audio"][local_idx],
-            chunk["state_rgb"][local_idx],
-            chunk["state_depth"][local_idx],
+        if self.env is None:
+            self._init_db()
+        t_get_start = time.perf_counter()
+        real_idx = self.active_indices[idx]
+        sample = self._load_sample(real_idx)
+        self._profile_getitem_time += time.perf_counter() - t_get_start
+        self._profile_getitem_calls += 1
+        return (
+            sample["state"],
+            sample["next_state"],
+            sample["action"],
+            sample["reward"],
+            sample["done"],
         )
-        next_state = (
-            chunk["next_audio"][local_idx],
-            chunk["next_rgb"][local_idx],
-            chunk["next_depth"][local_idx],
-        )
-        action = chunk["action"][local_idx]
-        reward = chunk["reward"][local_idx]
-        done = chunk["done"][local_idx]
-        return state, next_state, action, reward, done
 
+    def get_chunk_id_for_local_index(self, local_idx):
+        real_idx = self.active_indices[local_idx]
+        return int(real_idx // self.chunk_size)
+
+    def reset_profile_stats(self):
+        self._profile_lmdb_get_time = 0.0
+        self._profile_pickle_time = 0.0
+        self._profile_getitem_time = 0.0
+        self._profile_getitem_calls = 0
+
+    def get_profile_stats(self):
+        return {
+            "lmdb_get_time": float(self._profile_lmdb_get_time),
+            "pickle_time": float(self._profile_pickle_time),
+            "getitem_time": float(self._profile_getitem_time),
+            "getitem_calls": int(self._profile_getitem_calls),
+        }
 
 class ChunkAwareBatchSampler(Sampler):
-    """
-    Batch sampler that groups indices by chunk to reduce txn.get frequency.
-    """
-
-    def __init__(self, dataset: ChunkedHybridOfflineDataset, batch_size: int, drop_last: bool = False):
+    def __init__(self, dataset, batch_size, drop_last=False):
         self.dataset = dataset
         self.batch_size = int(batch_size)
-        self.drop_last = drop_last
+        self.drop_last = bool(drop_last)
 
     def __iter__(self):
-        chunk_groups = self.dataset.get_chunk_groups()
-        chunk_keys = list(chunk_groups.keys())
-        random.shuffle(chunk_keys)
+        chunk_to_indices = defaultdict(list)
+        for i in range(len(self.dataset)):
+            cid = self.dataset.get_chunk_id_for_local_index(i)
+            chunk_to_indices[cid].append(i)
 
-        for chunk_key in chunk_keys:
-            indices = list(chunk_groups[chunk_key])
-            random.shuffle(indices)
-            for start in range(0, len(indices), self.batch_size):
-                batch = indices[start:start + self.batch_size]
-                if len(batch) < self.batch_size and self.drop_last:
-                    continue
-                yield batch
+        chunk_ids = list(chunk_to_indices.keys())
+        random.shuffle(chunk_ids)
+
+        for cid in chunk_ids:
+            idxs = chunk_to_indices[cid]
+            random.shuffle(idxs)
+            for start in range(0, len(idxs), self.batch_size):
+                batch = idxs[start : start + self.batch_size]
+                if len(batch) == self.batch_size or not self.drop_last:
+                    yield batch
 
     def __len__(self):
-        chunk_groups = self.dataset.get_chunk_groups()
-        total_batches = 0
-        for indices in chunk_groups.values():
-            n = len(indices)
-            if self.drop_last:
-                total_batches += n // self.batch_size
-            else:
-                total_batches += (n + self.batch_size - 1) // self.batch_size
-        return total_batches
-
+        total = len(self.dataset)
+        if self.drop_last:
+            return total // self.batch_size
+        return (total + self.batch_size - 1) // self.batch_size
 
 class ChunkWindowBatchSampler(Sampler):
-    """
-    Keep only a small window of chunks "active" in memory during an epoch.
-    All samples are still consumed once per epoch, but chunk switching becomes
-    smoother and memory usage is bounded by window size.
-    """
-
     def __init__(
         self,
-        dataset: ChunkedHybridOfflineDataset,
-        batch_size: int,
-        window_chunks: int = 8,
-        drop_last: bool = False,
-        log_window: bool = False,
-        log_every_batches: int = 100,
+        dataset,
+        batch_size,
+        window_chunks=8,
+        drop_last=False,
+        log_window=False,
+        log_every_batches=100,
     ):
         self.dataset = dataset
         self.batch_size = int(batch_size)
-        self.window_chunks = int(window_chunks)
-        self.drop_last = drop_last
+        self.window_chunks = max(1, int(window_chunks))
+        self.drop_last = bool(drop_last)
         self.log_window = bool(log_window)
-        self.log_every_batches = int(log_every_batches)
+        self.log_every_batches = max(1, int(log_every_batches))
 
     def __iter__(self):
-        chunk_groups = self.dataset.get_chunk_groups()
-        chunk_keys = list(chunk_groups.keys())
-        random.shuffle(chunk_keys)
+        chunk_to_indices = defaultdict(list)
+        for i in range(len(self.dataset)):
+            cid = self.dataset.get_chunk_id_for_local_index(i)
+            chunk_to_indices[cid].append(i)
 
-        if self.window_chunks <= 0:
-            self.window_chunks = 1
+        ordered_chunk_ids = list(chunk_to_indices.keys())
+        random.shuffle(ordered_chunk_ids)
 
-        active = []
-        next_chunk_ptr = 0
-        emitted_batches = 0
-        finished_chunks = 0
+        batch_count = 0
+        for start in range(0, len(ordered_chunk_ids), self.window_chunks):
+            window = ordered_chunk_ids[start : start + self.window_chunks]
+            pool = []
+            for cid in window:
+                pool.extend(chunk_to_indices[cid])
+            random.shuffle(pool)
 
-        def _push_next_chunk():
-            nonlocal next_chunk_ptr
-            if next_chunk_ptr >= len(chunk_keys):
-                return
-            key = chunk_keys[next_chunk_ptr]
-            next_chunk_ptr += 1
-            idxs = list(chunk_groups[key])
-            random.shuffle(idxs)
-            active.append([key, idxs, 0])  # key, indices, cursor
-            if self.log_window:
-                print(
-                    f"[ChunkWindow] add chunk={key.decode('utf-8', errors='ignore')} "
-                    f"samples={len(idxs)} active={len(active)}"
-                )
-
-        while len(active) < self.window_chunks and next_chunk_ptr < len(chunk_keys):
-            _push_next_chunk()
-
-        if self.log_window:
-            print(
-                f"[ChunkWindow] start epoch chunks={len(chunk_keys)} "
-                f"window={self.window_chunks} batch_size={self.batch_size}"
-            )
-
-        while active:
-            # Randomly sample from current active window for better mixing.
-            slot = random.randrange(len(active))
-            key, idxs, cursor = active[slot]
-            batch = idxs[cursor: cursor + self.batch_size]
-
-            if len(batch) < self.batch_size and self.drop_last:
-                # Mark this chunk as exhausted and replace it.
-                active.pop(slot)
-                _push_next_chunk()
-                continue
-
-            if len(batch) > 0:
-                emitted_batches += 1
-                if self.log_window and self.log_every_batches > 0 and emitted_batches % self.log_every_batches == 0:
-                    print(
-                        f"[ChunkWindow] batches={emitted_batches} "
-                        f"active={len(active)} next_chunk_ptr={next_chunk_ptr}/{len(chunk_keys)} "
-                        f"finished_chunks={finished_chunks}"
-                    )
-                yield batch
-
-            cursor += len(batch)
-            if cursor >= len(idxs):
-                finished_chunks += 1
-                active.pop(slot)
-                _push_next_chunk()
-            else:
-                active[slot][2] = cursor
+            for offset in range(0, len(pool), self.batch_size):
+                batch = pool[offset : offset + self.batch_size]
+                if len(batch) == self.batch_size or not self.drop_last:
+                    batch_count += 1
+                    if self.log_window and batch_count % self.log_every_batches == 0:
+                        print(
+                            f"[ChunkWindowBatchSampler] batch={batch_count} "
+                            f"window_chunks={len(window)} pool={len(pool)}"
+                        )
+                    yield batch
 
     def __len__(self):
-        chunk_groups = self.dataset.get_chunk_groups()
-        total_batches = 0
-        for indices in chunk_groups.values():
-            n = len(indices)
-            if self.drop_last:
-                total_batches += n // self.batch_size
-            else:
-                total_batches += (n + self.batch_size - 1) // self.batch_size
-        return total_batches
+        total = len(self.dataset)
+        if self.drop_last:
+            return total // self.batch_size
+        return (total + self.batch_size - 1) // self.batch_size
+
+
 
 class ShardedPTDataset(Dataset):
     def __init__(self, shard_pattern, preload=True):

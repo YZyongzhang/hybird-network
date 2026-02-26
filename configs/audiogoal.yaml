@@ -46,7 +46,7 @@ COLLECT:
   COLLECT_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   SAVE_LOADER: False
   TYPE: "OfflineRL" # HybirdNetwork OfflineRL
   # TYPE: "HybirdNetwork"
@@ -72,7 +72,7 @@ TRAIN:
     # train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
     train_shard_pattern: "dataset-data3/dataset/offline/pt/v10/train.json"
     train_lmdb_path: "media/lmdb/offline_with_hybrid"
-    USE_CHUNKED_LMDB: True
+    USE_CHUNKED_LMDB: False
     PREFETCH_FACTOR: 2
     CHUNK_AWARE_BATCH: False
     CHUNK_WINDOW_BATCH: False
@@ -114,12 +114,13 @@ EVAL:
   STOCHASTIC_SAC: False
 
 LMDB:
-  OPEN: False
-  TYPE: "OfflineTwoFrameWithHybridLMDB"
+  OPEN: True
+  TYPE: "OfflineWithHybridPT"
   CHUNK_SIZE: 512
+  SHARD_SIZE: 10000
   # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
   RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(greedy)"
-  TO_PATH: "media/lmdb/offline_with_hybrid"
+  TO_PATH: "media/pt/offline_with_hybrid"
   CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
 
 
