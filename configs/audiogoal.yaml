@@ -66,8 +66,8 @@ TRAIN:
     SAVE_LOADER: False
     LOAD_PATH: False
     MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
-    EXPERIMENT_LOSS_DIR: "final/telephone/loss/8"
-    EXPERIMENT_CKPT_DIR: "final/telephone/ckpt/8"
+    EXPERIMENT_LOSS_DIR: "media/offline_hybird/7"
+    EXPERIMENT_CKPT_DIR: "media/offline_hybird/7"
     # train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     # train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
     train_shard_pattern: "media/pt/offline_with_hybrid"
@@ -86,13 +86,13 @@ TRAIN:
     hidden_dim: 128
     # lr: 0.00004
     lr : 0.00005
-    target_entropy: -4
+    target_entropy: 0.8 # 0.9 * logA = 0.9 * 1.386 =1.2474
     tau: 0.005
-    beta: 0.001
+    beta: 0.5
     gamma: 0.99
     batch_size: 512
-    num_epochs : 300
-    online_test_epoch : 1
+    num_epochs : 1000
+    online_test_epoch : 1000
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
 
 EVAL:

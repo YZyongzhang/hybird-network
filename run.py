@@ -184,13 +184,49 @@ if __name__ == "__main__":
                     tau=tau,
                     gamma=gamma,
                     beta=beta,
-                    device=device
+                    device=device,
+                    hybird_ckpt_path=offline_config.ONLINE_CKPT,
                 )
                 if offline_config.LOAD_PATH:
                     sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH))
                     sac_model.train()
                 assert not offline_config.buffer
                 Train(model=sac_model , trainer=OfflineAndHybird  , config= offline_config , online_test = online_test )
+            elif offline_config.model == 'v1_4':
+                from network import SAC_Hybird_LSTM_CQL_model
+                online_test = OnlineTest(env=env, hybirdmodel=model, config=offline_config)
+                state_dim = offline_config.state_dim
+                action_dim = offline_config.action_dim
+                hidden_dim = offline_config.hidden_dim
+                lr = offline_config.lr
+                target_entropy = offline_config.target_entropy
+                tau = offline_config.tau
+                gamma = offline_config.gamma
+                beta = offline_config.beta
+                lstm_hidden_dim = int(getattr(offline_config, "lstm_hidden_dim", state_dim))
+                lstm_num_layers = int(getattr(offline_config, "lstm_num_layers", 1))
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                sac_model = SAC_Hybird_LSTM_CQL_model(
+                    state_dim=state_dim,
+                    hidden_dim=hidden_dim,
+                    action_dim=action_dim,
+                    actor_lr=lr,
+                    critic_lr=lr,
+                    alpha_lr=lr,
+                    target_entropy=target_entropy,
+                    tau=tau,
+                    gamma=gamma,
+                    beta=beta,
+                    device=device,
+                    hybird_ckpt_path=offline_config.ONLINE_CKPT,
+                    lstm_hidden_dim=lstm_hidden_dim,
+                    lstm_num_layers=lstm_num_layers,
+                )
+                if offline_config.LOAD_PATH:
+                    sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH))
+                    sac_model.train()
+                assert not offline_config.buffer
+                Train(model=sac_model, trainer=OfflineAndHybird, config=offline_config, online_test=online_test)
 
             elif offline_config.model == 'v2':
                 from network import CQLSAC

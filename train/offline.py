@@ -301,7 +301,7 @@ class OfflineAndHybird:
                         f"step={global_step} actor_loss={loss_dict['actor_loss']:.6f} "
                         f"critic1_loss={loss_dict['critic1_loss']:.6f} critic2_loss={loss_dict['critic2_loss']:.6f}"
                     )
-            if epoch % 1 == 0:
+            if epoch % 5 == 0:
                 torch.save(self.agent.state_dict(), f"{self.save_dir}/sac_hybrid_model_{epoch}.pth")
             if (
                 self.online_test is not None
