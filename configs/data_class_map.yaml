@@ -1,0 +1,4 @@
+# Dataset class labels
+# format: <dataset_name>: <class_name>
+
+offline(greedy): telephone

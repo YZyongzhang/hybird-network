@@ -70,8 +70,9 @@ class SAC_model(torch.nn.Module):
                                                    lr=critic_lr)
         # 使用alpha的log值,可以使训练结果比较稳定
         # self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float) # 能跑出spl0.3的版本
-        self.log_alpha = torch.tensor(np.log(1), dtype=torch.float) # 改成这个，可以跑出spl0.33
-        self.log_alpha.requires_grad = True  # 可以对alpha求梯度
+        self.log_alpha = torch.nn.Parameter(
+            torch.tensor(np.log(1.0), dtype=torch.float32, device=device)
+        )
         self.log_alpha_optimizer = torch.optim.Adam([self.log_alpha],
                                                     lr=alpha_lr)
         self.target_entropy = target_entropy  # 目标熵的大小
@@ -90,18 +91,19 @@ class SAC_model(torch.nn.Module):
 
     # 计算目标Q值,直接用策略网络的输出概率进行期望计算
     def calc_target(self, rewards, next_states, dones):
-        next_probs = self.actor(next_states)
-        next_log_probs = torch.log(next_probs + 1e-8)
-        entropy = -torch.sum(next_probs * next_log_probs, dim=1, keepdim=True)
-        q1_value = self.target_critic_1(next_states)
-        q2_value = self.target_critic_2(next_states)
+        with torch.no_grad():
+            next_probs = self.actor(next_states)
+            next_log_probs = torch.log(next_probs + 1e-8)
+            entropy = -torch.sum(next_probs * next_log_probs, dim=1, keepdim=True)
+            q1_value = self.target_critic_1(next_states)
+            q2_value = self.target_critic_2(next_states)
 
-        # 因为这里要追求最大化熵
-        min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
-                               dim=1,
-                               keepdim=True)
-        next_value = min_qvalue + self.log_alpha.exp() * entropy
-        td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
+            # 因为这里要追求最大化熵
+            min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
+                                   dim=1,
+                                   keepdim=True)
+            next_value = min_qvalue + self.log_alpha.exp() * entropy
+            td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
     def soft_update(self, net, target_net):
@@ -118,14 +120,15 @@ class SAC_model(torch.nn.Module):
         # import pdb ; pdb.set_trace()
         dones = dones.float().to(self.device)
         actions = actions.long().to(self.device)
-        actions = actions.unsqueeze(1)  # 确保动作是二维的
+        if actions.dim() == 1:
+            actions = actions.unsqueeze(1)  # 确保动作是二维的
         # 更新策略网络
         probs = self.actor(states)
         log_probs = torch.log(probs + 1e-8)
         # 直接根据概率计算熵
         entropy = -torch.sum(probs * log_probs, dim=1, keepdim=True)  #
-        q1_value = self.critic_1(states)
-        q2_value = self.critic_2(states)
+        q1_value = self.critic_1(states).detach()
+        q2_value = self.critic_2(states).detach()
         min_qvalue = torch.sum(probs * torch.min(q1_value, q2_value),
                                dim=1,
                                keepdim=True)  # 直接根据概率计算期望

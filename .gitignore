@@ -11,3 +11,8 @@ heard_unheard/
 exp/
 *.png
 events.*
+__pycache__/
+*/__pycache__/
+*.pyc
+artifacts/
+logs/

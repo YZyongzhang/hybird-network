@@ -65,12 +65,11 @@ TRAIN:
     model: "v1_3"
     SAVE_LOADER: False
     LOAD_PATH: False
-    MODEL_PATH: 'experiment/ckpt/offline/Foundation_model_150.pth'
     EXPERIMENT_LOSS_DIR: "media/offline_hybird/7"
     EXPERIMENT_CKPT_DIR: "media/offline_hybird/7"
     # train_shard_pattern: "./dataset/offline/pt/v7/train_buffer.json"
     # train_shard_pattern: "./dataset/offline/pt/v5/train_greedy.json"
-    train_shard_pattern: "media/pt/offline_with_hybrid"
+    train_shard_pattern: "media/pt/offline_muti_embedding"
     
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 4
@@ -80,7 +79,7 @@ TRAIN:
     NUM_WORKERS: 0
     PERSISTENT_WORKERS: True
     log_interval: 1
-    ONLINE_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
+    ONLINE_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
@@ -91,8 +90,8 @@ TRAIN:
     beta: 0.5
     gamma: 0.99
     batch_size: 512
-    num_epochs : 1000
-    online_test_epoch : 1000
+    num_epochs : 300
+    online_test_epoch : 10
     list: "10个epoch平滑，beta0.01 , 用全部的val数据去测试"
 
 EVAL:
@@ -107,13 +106,12 @@ EVAL:
 
 PT:
   OPEN: False
-  TYPE: "OfflineWithHybridPT"
-  CHUNK_SIZE: 512
+  TYPE: "offlinelstm_v15"
   SHARD_SIZE: 10000
-  # RAW_DATA_PATH: "configs/level/greedy/distance_70.pkl"
-  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(greedy)"
-  TO_PATH: "media/pt/offline_with_hybrid"
-  CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
+  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+  TO_PATH: "media/pt/offline_LSTM_muti_embedding"
+  CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
+  SEQ_LEN: 5
 
 
 DATASET:

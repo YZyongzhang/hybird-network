@@ -3,6 +3,7 @@ sys.path.append("/home/getuanhui/project/finnal_exp")
 import os
 import random
 import json
+from collections import deque
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, List
 
@@ -14,6 +15,7 @@ import matplotlib.pyplot as plt
 from configs.default import get_config
 from env import Env
 from network import HybirdNetwork, SAC_Hybird_model
+from network import SAC_LSTM_CQL_v1_5
 from utils.visualizations import draw_point, plot_top_down_map
 
 EVAL_SETTINGS = {
@@ -439,6 +441,172 @@ def run_v1_3_eval(
     print_summary("sac", sac_stats)
 
     return  sac_stats
+
+
+def build_v1_5_model(config, device: torch.device):
+    return SAC_LSTM_CQL_v1_5(
+        state_dim=config.state_dim,
+        hidden_dim=config.hidden_dim,
+        action_dim=config.action_dim,
+        actor_lr=config.lr,
+        critic_lr=config.lr,
+        alpha_lr=config.lr,
+        target_entropy=config.target_entropy,
+        tau=config.tau,
+        gamma=config.gamma,
+        beta=config.beta,
+        device=device,
+        lstm_hidden_dim=int(getattr(config, "lstm_hidden_dim", config.state_dim)),
+        lstm_num_layers=int(getattr(config, "lstm_num_layers", 1)),
+    ).to(device)
+
+
+def _load_optional_subweights(model, temporal_ckpt="", actor_ckpt="", critic1_ckpt="", critic2_ckpt=""):
+    if temporal_ckpt:
+        model.temporal_encoder.load_state_dict(torch.load(temporal_ckpt, map_location=model.device))
+    if actor_ckpt:
+        model.actor.load_state_dict(torch.load(actor_ckpt, map_location=model.device))
+    if critic1_ckpt:
+        model.critic_1.load_state_dict(torch.load(critic1_ckpt, map_location=model.device))
+        model.target_critic_1.load_state_dict(model.critic_1.state_dict())
+    if critic2_ckpt:
+        model.critic_2.load_state_dict(torch.load(critic2_ckpt, map_location=model.device))
+        model.target_critic_2.load_state_dict(model.critic_2.state_dict())
+
+
+def evaluate_policy_v1_5(
+    env,
+    policy_name: str,
+    hybrid_model,
+    sac_model,
+    episodes: int,
+    max_steps: int,
+    device: torch.device,
+    deterministic: bool,
+):
+    reward_sum = 0.0
+    spl_sum = 0.0
+    success_sum = 0.0
+    steps_sum = 0
+    seq_len = 5
+
+    for ep_idx in range(episodes):
+        obs = env.reset()
+        done = False
+        ep_reward = 0.0
+        ep_steps = 0
+        info = {}
+        prev_rgb = None
+        prev_depth = None
+        seq_states = deque(maxlen=seq_len)
+
+        while (not done) and ep_steps < max_steps:
+            audio, rgb, depth = to_tensors(obs)
+            trgb, tdepth = build_two_frame(rgb, depth, prev_rgb, prev_depth)
+            with torch.no_grad():
+                emb = hybrid_model.embedding_forward(
+                    audio.to(device), trgb.to(device), tdepth.to(device)
+                ).detach().cpu()
+            seq_states.append(emb)
+            while len(seq_states) < seq_len:
+                seq_states.appendleft(torch.zeros_like(emb))
+            seq_tensor = torch.stack(list(seq_states), dim=0).unsqueeze(0).to(device)
+            action = int(sac_model.get_action(seq_tensor, eval=deterministic))
+
+            obs, reward, done, info = env.step(action=action)
+            ep_reward += float(reward)
+            ep_steps += 1
+            prev_rgb, prev_depth = rgb, depth
+
+        spl = float(info.get("spl", 0.0))
+        success = float(info.get("success", 1.0 if spl > 0 else 0.0))
+        reward_sum += ep_reward
+        spl_sum += spl
+        success_sum += success
+        steps_sum += ep_steps
+        episode_id = getattr(env._env.current_episode, "episode_id", "unknown")
+        print(
+            f"[{policy_name}] episode {ep_idx + 1}/{episodes} | "
+            f"id={episode_id} reward={ep_reward:.4f} spl={spl:.4f} "
+            f"success={success:.0f} steps={ep_steps}"
+        )
+
+    return EvalStats(
+        avg_reward=reward_sum / episodes,
+        avg_spl=spl_sum / episodes,
+        success_rate=success_sum / episodes,
+        avg_steps=steps_sum / episodes,
+        episodes=episodes,
+    )
+
+
+def run_v1_5_eval(
+    config,
+    hybrid_ckpt: str,
+    sac_ckpt: str,
+    episodes: int = 0,
+    max_steps: int = 200,
+    seed: int = 0,
+    stochastic_sac: bool = False,
+    temporal_ckpt: str = "",
+    actor_ckpt: str = "",
+    critic1_ckpt: str = "",
+    critic2_ckpt: str = "",
+):
+    set_seed(seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    hybrid_model = HybirdNetwork().to(device)
+    hybrid_model.load_state_dict(torch.load(hybrid_ckpt, map_location=device))
+    hybrid_model.eval()
+
+    offline_cfg = config.TASK_CONFIG.TRAIN.OFFLINE
+    if getattr(offline_cfg, "model", None) != "v1_5":
+        print(f"warning: config TRAIN.OFFLINE.model={offline_cfg.model}, but evaluator is fixed to v1_5")
+
+    sac_model = build_v1_5_model(offline_cfg, device=device)
+    if sac_ckpt:
+        sac_model.load_state_dict(torch.load(sac_ckpt, map_location=device), strict=False)
+    _load_optional_subweights(
+        sac_model,
+        temporal_ckpt=temporal_ckpt,
+        actor_ckpt=actor_ckpt,
+        critic1_ckpt=critic1_ckpt,
+        critic2_ckpt=critic2_ckpt,
+    )
+    sac_model.eval()
+
+    env = Env(config)
+    total_eps = env._env.number_of_episodes
+    run_episodes = episodes if episodes > 0 else total_eps
+    run_episodes = min(run_episodes, total_eps)
+
+    print(f"device={device} episodes={run_episodes} max_steps={max_steps} sac_type=v1_5")
+    print(f"hybrid_ckpt={hybrid_ckpt}")
+    print(f"sac_ckpt={sac_ckpt}")
+    if temporal_ckpt:
+        print(f"temporal_ckpt={temporal_ckpt}")
+    if actor_ckpt:
+        print(f"actor_ckpt={actor_ckpt}")
+    if critic1_ckpt:
+        print(f"critic1_ckpt={critic1_ckpt}")
+    if critic2_ckpt:
+        print(f"critic2_ckpt={critic2_ckpt}")
+    print("-" * 100)
+
+    sac_stats = evaluate_policy_v1_5(
+        env=env,
+        policy_name="sac_v1_5",
+        hybrid_model=hybrid_model,
+        sac_model=sac_model,
+        episodes=run_episodes,
+        max_steps=max_steps,
+        device=device,
+        deterministic=not stochastic_sac,
+    )
+    print("-" * 100)
+    print_summary("sac_v1_5", sac_stats)
+    return sac_stats
 
 
 def main():
