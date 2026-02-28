@@ -1,0 +1,14 @@
+model = "gpt-5-codex-2025-09-15"
+model_provider = "azure"
+
+[model_providers.azure]
+name = "gpt-5-codex-2025-09-15"
+base_url = "https://litellm.mybigai.ac.cn/"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+
+[projects."/home/getuanhui/.codex"]
+trust_level = "trusted"
+
+[projects."/home/getuanhui/project/finnal_exp"]
+trust_level = "trusted"

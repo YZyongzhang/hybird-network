@@ -121,47 +121,164 @@ class CollidedCollect:
         self.save_path_img = config.IMG_DIR
         self.save_path_type = config.IMG_TYPE
         self.hybird_network = kwargs['model']
+        self.max_steps = int(getattr(config, "MAX_STEPS", 200))
+        self.recovery_max_tries = int(getattr(config, "RECOVERY_MAX_TRIES", 2))
+        self.policy_mix_hybrid = float(getattr(config, "POLICY_MIX_HYBRID", 0.75))
+        self.policy_mix_oracle = float(getattr(config, "POLICY_MIX_ORACLE", 0.15))
+        self.policy_mix_random = float(getattr(config, "POLICY_MIX_RANDOM", 0.10))
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._prev_rgb = None
+        self._prev_depth = None
+
+        total_mix = self.policy_mix_hybrid + self.policy_mix_oracle + self.policy_mix_random
+        if total_mix <= 0:
+            self.policy_mix_hybrid, self.policy_mix_oracle, self.policy_mix_random = 1.0, 0.0, 0.0
+        else:
+            self.policy_mix_hybrid /= total_mix
+            self.policy_mix_oracle /= total_mix
+            self.policy_mix_random /= total_mix
+
+    def _save(self, **kwargs):
+        # Auto-extend data struct keys so this collector can record collision metadata
+        # without forcing config changes.
+        for key, value in kwargs.items():
+            if key not in self.save_data:
+                self.save_data[key] = []
+            self.save_data[key].append(value)
+
+    def _policy_action(self, obs):
+        rgb = torch.from_numpy(obs['rgb']).float() / 255.0
+        depth = torch.from_numpy(obs['depth']).float()
+        audio = torch.from_numpy(obs['spectrogram'][0]).float()
+        if self._prev_rgb is None:
+            self._prev_rgb = torch.zeros_like(rgb)
+        if self._prev_depth is None:
+            self._prev_depth = torch.zeros_like(depth)
+        trgb = torch.cat([self._prev_rgb, rgb], dim=2)
+        tdepth = torch.cat([self._prev_depth, depth], dim=2)
+        with torch.no_grad():
+            logits = self.hybird_network(
+                audio.to(self.device),
+                trgb.to(self.device),
+                tdepth.to(self.device),
+            )
+        self._prev_rgb = rgb
+        self._prev_depth = depth
+        return torch.argmax(logits).item()
+
+    def _oracle_action(self):
+        actions = self.sim.compute_oracle_actions() or []
+        for action in actions:
+            if action != 0:
+                return action
+        return 1
+
+    def _sample_mixed_policy_action(self, obs):
+        r = random.random()
+        if r < self.policy_mix_hybrid:
+            return self._policy_action(obs), "hybrid"
+        if r < self.policy_mix_hybrid + self.policy_mix_oracle:
+            return self._oracle_action(), "oracle"
+        return random.choice([1, 2, 3]), "random"
+
+    def _step_and_record(self, action, path_point, phase, policy_source=""):
+        obs, reward, done, info = self.env.step(action=action)
+        collided = bool(self.sim.previous_step_collided)
+        path_point.append(self.sim.get_agent_state().position)
+        self._save(
+            obs=obs,
+            reward=reward,
+            done=done,
+            info=info,
+            action_id=action,
+            collision=collided,
+            phase=phase,
+            policy_source=policy_source,
+        )
+        return obs, done, collided
+
+    def _recover_after_collision(self, path_point):
+        # Try to "walk out" from collision:
+        # left-turn + forward, then right-turn + forward (repeat if needed).
+        # If both fail, fallback to short oracle actions.
+        for _ in range(self.recovery_max_tries):
+            for turn_action in (2, 3):
+                obs, done, _ = self._step_and_record(turn_action, path_point, phase="recovery_turn")
+                if done:
+                    return obs, True, True
+
+                obs, done, collided = self._step_and_record(1, path_point, phase="recovery_forward")
+                if done:
+                    return obs, True, True
+                if not collided:
+                    return obs, False, True
+
+                # Roll heading back to original and try another side.
+                reverse_turn = 3 if turn_action == 2 else 2
+                obs, done, _ = self._step_and_record(reverse_turn, path_point, phase="recovery_reset")
+                if done:
+                    return obs, True, False
+
+        # Fallback: take a few oracle actions to get unstuck.
+        oracle_actions = self.sim.compute_oracle_actions() or []
+        obs = None
+        for action in oracle_actions[:3]:
+            if action == 0:
+                continue
+            obs, done, collided = self._step_and_record(action, path_point, phase="recovery_oracle")
+            if done:
+                return obs, True, not collided
+            if not collided:
+                return obs, False, True
+
+        return obs, False, False
+
     def collect(self):
         for _ in range(self.env._env.number_of_episodes):
-            
             self.save_data = copy.deepcopy(self.save_data_struct)
-            greedy_path_point = []
-            collided_path_point = []
             obs = self.env.reset()
-            pre_obs = obs
-            rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-            depth = torch.from_numpy(obs['depth']).float()
-            audio = torch.from_numpy(obs['spectrogram'][0]).float()
-            action = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
-            action = torch.argmax(action).item()
+            self._prev_rgb = None
+            self._prev_depth = None
             done = False
-            greedy_path_point.append(self.sim.get_agent_state().position)
-            while not done:
-                obs , rewad , done , info = self.env.step(action = action)
-                pre_obs = obs
-                rgb = torch.from_numpy(obs['rgb']).float() / 255.0
-                depth = torch.from_numpy(obs['depth']).float()
-                audio = torch.from_numpy(obs['spectrogram'][0]).float()
-                action = self.hybird_network(audio.to('cuda') , rgb.to('cuda') , depth.to('cuda'))
-                action = torch.argmax(action).item()
-                collided = self.sim.previous_step_collided
-                if collided:
-                    greedy_action = self.sim.compute_oracle_actions()
-                    self.save(obs = obs)
-                    for action in greedy_action[:3]:
-                        obs , reward , done , info = self.env.step(action = action)
-                        collided_path_point.append(self.sim.get_agent_state().position)
-                        self.save(obs = obs , reward=reward,done=done,info=info,action_id=action)
-                        
-                        if done:
-                            break
-                    self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+            step = 0
+            collision_count = 0
+            recovery_success_count = 0
+            path_point = [self.sim.get_agent_state().position]
+
+            self._save(obs=obs, sound_id=self.env._env.current_episode.info['sound'])
+
+            while (not done) and (step < self.max_steps):
+                action, policy_source = self._sample_mixed_policy_action(obs)
+                obs, done, collided = self._step_and_record(
+                    action,
+                    path_point,
+                    phase=f"policy_{policy_source}",
+                    policy_source=policy_source,
+                )
+                step += 1
+
+                if not collided or done:
+                    continue
+
+                collision_count += 1
+                obs, done, recovered = self._recover_after_collision(path_point)
+                if recovered:
+                    recovery_success_count += 1
+
+                if obs is None:
+                    # No valid transition was produced in recovery fallback.
                     break
-            
-            
-    def save(self , **kwargs):
-        for key , value in kwargs.items():
-            self.save_data[key].append(value)
+
+            self._save(
+                # map=draw_map(self.env, path_point),
+                path_point=path_point,
+                collision_count=collision_count,
+                recovery_success_count=recovery_success_count,
+            )
+            self.store(self.env._env.current_episode.scene_id , self.env._env.current_episode)
+
+    def save(self, **kwargs):
+        self._save(**kwargs)
     def store(self, scene , id):
         os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
         

@@ -1,0 +1,56 @@
+{
+  "root": "dataset-data3/dataset/pickle/offline(muti_collided)",
+  "episodes": 5,
+  "steps": {
+    "avg": 128.4,
+    "median": 154.0,
+    "p90": 200.0,
+    "p95": 200.0,
+    "min": 32,
+    "max": 200
+  },
+  "collision": {
+    "episodes_with_collision": 4,
+    "episodes_with_collision_ratio": 0.8,
+    "total_collision_steps": 89,
+    "collision_step_ratio": 0.13862928348909656,
+    "avg_collision_steps_per_episode": 17.8,
+    "avg_collision_ratio_per_episode": 0.10172727272727274,
+    "longest_collision_run": {
+      "avg": 0.8,
+      "p95": 1.0,
+      "max": 1
+    },
+    "collision_run_distribution": {
+      "num_runs": 89,
+      "mean": 1.0,
+      "p95": 1.0,
+      "max": 1
+    }
+  },
+  "recovery": {
+    "recovered_after_collision": 4,
+    "recovered_after_collision_ratio": 0.8,
+    "stuck_at_end_after_collision": 0,
+    "stuck_at_end_after_collision_ratio": 0.0
+  },
+  "navigation_success_distribution": {
+    "success_eps": 0.0,
+    "counts": {
+      "reached_goal_not_stopped": 2,
+      "stopped_not_goal": 2,
+      "reached_goal_and_stopped_but_not_done": 1
+    },
+    "ratios": {
+      "reached_goal_not_stopped": 0.4,
+      "stopped_not_goal": 0.4,
+      "reached_goal_and_stopped_but_not_done": 0.2
+    }
+  },
+  "reward_summary": {
+    "min": -1.0099999904632568,
+    "max": 0.9900000095367432,
+    "mean": 0.08501558750867844,
+    "std": 0.6523430943489075
+  }
+}

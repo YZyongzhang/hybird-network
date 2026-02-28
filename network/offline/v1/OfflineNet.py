@@ -152,25 +152,13 @@ class SAC_model(torch.nn.Module):
 
 
         critic_1_q_values = self.critic_1(states)
-        q_max, _ = critic_1_q_values.max(dim=1)
-        q_min, _ = critic_1_q_values.min(dim=1)
-
-        diff = (q_max - q_min).mean().item()
-
         critic_1_q_values_ = critic_1_q_values.gather(1, actions).squeeze(1)
 
-        # critic_1_q_values_target = self.target_critic_1(states)
-        # critic_1_q_values_target_ = critic_1_q_values_target.gather(1,actions).squeeze(1)
-        gap_1 = (torch.max(critic_1_q_values , dim =1).values - critic_1_q_values_).mean()
-        q_1_mean = critic_1_q_values.mean()
-        
         critic_1_loss = torch.mean(
             F.mse_loss(critic_1_q_values_, td_target.detach()))
 
         critic_2_q_values = self.critic_2(states)
         critic_2_q_values_ = critic_2_q_values.gather(1, actions).squeeze(1)
-        gap_2 = (torch.max(critic_2_q_values , dim =1).values  - critic_2_q_values_).mean()
-        q_2_mean = critic_2_q_values.mean()
 
         critic_2_loss = torch.mean(
             F.mse_loss(critic_2_q_values_, td_target.detach()))
@@ -206,11 +194,6 @@ class SAC_model(torch.nn.Module):
             'alpha_loss': alpha_loss.item(),
             'cql_1_loss': cql_1_loss.item(),
             'cql_2_loss': cql_2_loss.item(),
-            'q_1_mean':q_1_mean.item(),
-            'q_2_mean':q_2_mean.item(),
-            'gap_1':gap_1.item(),
-            'gap_2':gap_2.item(),
-            'diff':diff,
             'entropy': entropy.mean().item(),
             'alpha': self.log_alpha.exp().item()
         }

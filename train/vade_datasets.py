@@ -66,7 +66,7 @@ class ShardedPTDatasetOffline(Dataset):
         super().__init__()
         self.shard_files = []
         self.use_attention = attention
-        self.get_files(train_shard_dir)
+        self.source_dirs = self.get_files(train_shard_dir)
         # for pattern in shard_pattern:
         #     lists_ = glob.glob(pattern)
         #     random.shuffle(lists_)
@@ -74,7 +74,7 @@ class ShardedPTDatasetOffline(Dataset):
         #     self.shard_files.extend(lists_[:40])
         assert len(self.shard_files) > 0, f"No shards found at {train_shard_dir}"
         print(
-            f"[ShardedPTDatasetOffline] found {len(self.shard_files)} shards in {train_shard_dir}"
+            f"[ShardedPTDatasetOffline] found {len(self.shard_files)} shards from {len(self.source_dirs)} directories"
         )
 
         self.preload = preload
@@ -103,13 +103,36 @@ class ShardedPTDatasetOffline(Dataset):
         print(f"[ShardedPTDatasetOffline] total samples: {self.total_size}")
 
     def get_files(self, train_shard_dir):
-        if not os.path.isdir(train_shard_dir):
-            raise ValueError(f"train_shard_pattern must be a directory path, got: {train_shard_dir}")
-        files = sorted(glob.glob(os.path.join(train_shard_dir, "offline_rl_shard_*.pt")))
-        if not files:
-            files = sorted(glob.glob(os.path.join(train_shard_dir, "*.pt")))
-        self.shard_files.extend(files)
-        print(f"[ShardedPTDatasetOffline] shard glob matched {len(files)} files")
+        if isinstance(train_shard_dir, (str, os.PathLike)):
+            dirs = [train_shard_dir]
+        else:
+            try:
+                dirs = list(train_shard_dir)
+            except TypeError as exc:
+                raise ValueError(
+                    "train_shard_pattern must be a directory path or a sequence of directory paths"
+                ) from exc
+
+        if not dirs:
+            raise ValueError("train_shard_pattern must contain at least one directory path")
+
+        normalized_dirs = []
+        for dir_path in dirs:
+            dir_str = os.fspath(dir_path)
+            if not os.path.isdir(dir_str):
+                raise ValueError(
+                    f"train_shard_pattern must be a directory path, got: {dir_str}"
+                )
+            files = sorted(glob.glob(os.path.join(dir_str, "offline_rl_shard_*.pt")))
+            if not files:
+                files = sorted(glob.glob(os.path.join(dir_str, "*.pt")))
+            self.shard_files.extend(files)
+            normalized_dirs.append(dir_str)
+            print(
+                f"[ShardedPTDatasetOffline] shard glob matched {len(files)} files in {dir_str}"
+            )
+
+        return normalized_dirs
 
     def replay(self):
         pass
@@ -166,7 +189,7 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
         self.shard_files = []
         self.use_attention = attention
         self._rng = random.Random(seed) if seed is not None else random
-        self.get_files(train_shard_dir)
+        self.source_dirs = self.get_files(train_shard_dir)
         assert len(self.shard_files) > 0, f"No shards found at {train_shard_dir}"
 
         self.shards_per_epoch = max(1, int(shards_per_epoch))
@@ -180,12 +203,32 @@ class RandomReloadShardedPTDatasetOffline(Dataset):
         self._reload_shards(initial=True)
 
     def get_files(self, train_shard_dir):
-        if not os.path.isdir(train_shard_dir):
-            raise ValueError(f"train_shard_pattern must be a directory path, got: {train_shard_dir}")
-        files = sorted(glob.glob(os.path.join(train_shard_dir, "offline_rl_shard_*.pt")))
-        if not files:
-            files = sorted(glob.glob(os.path.join(train_shard_dir, "*.pt")))
-        self.shard_files.extend(files)
+        if isinstance(train_shard_dir, (str, os.PathLike)):
+            dirs = [train_shard_dir]
+        else:
+            try:
+                dirs = list(train_shard_dir)
+            except TypeError as exc:
+                raise ValueError(
+                    "train_shard_pattern must be a directory path or a sequence of directory paths"
+                ) from exc
+
+        if not dirs:
+            raise ValueError("train_shard_pattern must contain at least one directory path")
+
+        normalized_dirs = []
+        for dir_path in dirs:
+            dir_str = os.fspath(dir_path)
+            if not os.path.isdir(dir_str):
+                raise ValueError(
+                    f"train_shard_pattern must be a directory path, got: {dir_str}"
+                )
+            files = sorted(glob.glob(os.path.join(dir_str, "offline_rl_shard_*.pt")))
+            if not files:
+                files = sorted(glob.glob(os.path.join(dir_str, "*.pt")))
+            self.shard_files.extend(files)
+            normalized_dirs.append(dir_str)
+        return normalized_dirs
 
     def _rng_shuffle(self, values):
         if hasattr(self._rng, "shuffle"):

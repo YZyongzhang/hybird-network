@@ -10,6 +10,30 @@ import torch
 import os
 from torch.utils.data import Dataset , DataLoader
 import pickle
+from datetime import datetime
+
+
+def _build_auto_run_dirs(config):
+    """
+    Auto-create unique checkpoint/loss directories for each run.
+    Priority:
+    1) ckpt: <EXPERIMENT_CKPT_DIR>/<timestamp>, loss: <EXPERIMENT_CKPT_DIR>/loss/<timestamp>
+    2) ckpt: logs/ckpt/<timestamp>, loss: logs/tb/<timestamp>
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ckpt_dir = str(getattr(config, "EXPERIMENT_CKPT_DIR", "")).strip()
+    if ckpt_dir:
+        ckpt_base_dir = ckpt_dir
+        loss_base_dir = os.path.join(ckpt_dir, "loss")
+    else:
+        ckpt_base_dir = os.path.join("logs", "ckpt")
+        loss_base_dir = os.path.join("logs", "tb")
+
+    save_dir = os.path.join(ckpt_base_dir, ts)
+    loss_dir = os.path.join(loss_base_dir, ts)
+    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(loss_dir, exist_ok=True)
+    return save_dir, loss_dir
 
 
 def Train(model ,trainer , config , device = None , **kwargs):
@@ -17,9 +41,10 @@ def Train(model ,trainer , config , device = None , **kwargs):
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
         from torch.utils.tensorboard import SummaryWriter
-        save_dir = config.EXPERIMENT_CKPT_DIR
-        os.makedirs(save_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir=config.EXPERIMENT_LOSS_DIR)
+        save_dir, loss_dir = _build_auto_run_dirs(config)
+        writer = SummaryWriter(log_dir=loss_dir)
+        print(f"[Train] checkpoint dir: {save_dir}")
+        print(f"[Train] tensorboard loss dir: {loss_dir}")
         num_workers = int(getattr(config, "NUM_WORKERS", 10))
         persistent_workers = bool(getattr(config, "PERSISTENT_WORKERS", True))
         prefetch_factor = int(getattr(config, "PREFETCH_FACTOR", 2))
@@ -96,10 +121,10 @@ def Train(model ,trainer , config , device = None , **kwargs):
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         lr = 1e-6
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-        save_dir = config.EXPERIMENT_CKPT_DIR
-        os.makedirs(save_dir, exist_ok=True)
-        
-        writer = SummaryWriter(log_dir=config.EXPERIMENT_LOSS_DIR)
+        save_dir, loss_dir = _build_auto_run_dirs(config)
+        writer = SummaryWriter(log_dir=loss_dir)
+        print(f"[Train] checkpoint dir: {save_dir}")
+        print(f"[Train] tensorboard loss dir: {loss_dir}")
         
         train_dataset = ShardedPTDataset(shard_pattern=config.train_shard_pattern)
         val_dataset = ShardedPTDataset(shard_pattern=config.val_shard_pattern)

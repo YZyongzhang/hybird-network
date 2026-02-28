@@ -1,0 +1,245 @@
+{
+  "root": "dataset-data3/dataset/pickle/offline(muti_collided)",
+  "files_analyzed": 30,
+  "collision_source": "reward",
+  "collision_threshold": 0.0,
+  "episode_stats": {
+    "episodes_with_collision": 30,
+    "episodes_with_collision_ratio": 1.0,
+    "recovered_after_last_collision": 30,
+    "recovered_after_last_collision_ratio": 1.0,
+    "stuck_at_end": 0,
+    "stuck_at_end_ratio": 0.0
+  },
+  "step_stats": {
+    "total_steps": 479,
+    "collision_steps": 125,
+    "collision_step_ratio": 0.2609603340292276
+  },
+  "collision_run_stats": {
+    "num_runs": 117,
+    "mean": 1.0683760683760684,
+    "median": 1.0,
+    "p90": 1.0,
+    "p95": 2.0,
+    "max": 2,
+    "longest_run_global": 2
+  },
+  "reward_stats": {
+    "all_steps": {
+      "count": 479,
+      "min": -0.009999999776482582,
+      "max": 9.989999771118164,
+      "mean": 1.29271399974823,
+      "std": 2.2896273136138916,
+      "top_values": {
+        "0.9900000095367432": 324,
+        "-0.009999999776482582": 125,
+        "9.989999771118164": 30
+      }
+    },
+    "collision_steps": {
+      "count": 125,
+      "min": -0.009999999776482582,
+      "max": -0.009999999776482582,
+      "mean": -0.009999998845160007,
+      "std": 9.313225746154785e-10,
+      "top_values": {
+        "-0.009999999776482582": 125
+      }
+    },
+    "non_collision_steps": {
+      "count": 354,
+      "min": 0.9900000095367432,
+      "max": 9.989999771118164,
+      "mean": 1.7527117729187012,
+      "std": 2.5065267086029053,
+      "top_values": {
+        "0.9900000095367432": 324,
+        "9.989999771118164": 30
+      }
+    }
+  },
+  "top_longest_collision_episodes": [
+    {
+      "path": "17DRP5sb8fy/561.pkl",
+      "steps": 23,
+      "collision_steps": 8,
+      "collision_ratio": 0.34782608695652173,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/1409.pkl",
+      "steps": 16,
+      "collision_steps": 5,
+      "collision_ratio": 0.3125,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/1533.pkl",
+      "steps": 15,
+      "collision_steps": 6,
+      "collision_ratio": 0.4,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/2236.pkl",
+      "steps": 20,
+      "collision_steps": 5,
+      "collision_ratio": 0.25,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/953.pkl",
+      "steps": 23,
+      "collision_steps": 9,
+      "collision_ratio": 0.391304347826087,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1pXnuDYAj8r/10967.pkl",
+      "steps": 21,
+      "collision_steps": 6,
+      "collision_ratio": 0.2857142857142857,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1pXnuDYAj8r/4696.pkl",
+      "steps": 23,
+      "collision_steps": 6,
+      "collision_ratio": 0.2608695652173913,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1pXnuDYAj8r/6680.pkl",
+      "steps": 16,
+      "collision_steps": 5,
+      "collision_ratio": 0.3125,
+      "longest_run": 2,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/218.pkl",
+      "steps": 15,
+      "collision_steps": 2,
+      "collision_ratio": 0.13333333333333333,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/535.pkl",
+      "steps": 19,
+      "collision_steps": 4,
+      "collision_ratio": 0.21052631578947367,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/594.pkl",
+      "steps": 20,
+      "collision_steps": 3,
+      "collision_ratio": 0.15,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/652.pkl",
+      "steps": 17,
+      "collision_steps": 3,
+      "collision_ratio": 0.17647058823529413,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/72.pkl",
+      "steps": 10,
+      "collision_steps": 3,
+      "collision_ratio": 0.3,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/790.pkl",
+      "steps": 8,
+      "collision_steps": 3,
+      "collision_ratio": 0.375,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/800.pkl",
+      "steps": 16,
+      "collision_steps": 5,
+      "collision_ratio": 0.3125,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/905.pkl",
+      "steps": 12,
+      "collision_steps": 2,
+      "collision_ratio": 0.16666666666666666,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "17DRP5sb8fy/943.pkl",
+      "steps": 16,
+      "collision_steps": 5,
+      "collision_ratio": 0.3125,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/3675.pkl",
+      "steps": 22,
+      "collision_steps": 8,
+      "collision_ratio": 0.36363636363636365,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/5797.pkl",
+      "steps": 10,
+      "collision_steps": 2,
+      "collision_ratio": 0.2,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    },
+    {
+      "path": "1LXtFkjw3qL/5983.pkl",
+      "steps": 20,
+      "collision_steps": 6,
+      "collision_ratio": 0.3,
+      "longest_run": 1,
+      "recovered_after_last_collision": true,
+      "stuck_at_end": false
+    }
+  ]
+}
