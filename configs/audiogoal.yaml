@@ -41,7 +41,7 @@ TASK:
     DRAW_SHORTEST_PATH: True
 
 COLLECT:
-  OPEN: true
+  OPEN: False
   GRID_SIZE: 1.0
   TYPE: "collided"
   # Used by TYPE: "collided"
@@ -61,14 +61,25 @@ PT:
   OPEN: False
   TYPE: "offlinelstm_v15"
   RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(muti_collided)"
-  TO_PATH: "media/pt/offline_LSTM_muti_embedding_collided"
+  TO_PATH: "media/pt/offline_LSTM_muti_embedding_collided_reward_scaled"
   CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
+  # Reward shaping for PT production
+  REWARD_SCALE_ENABLE: True
+  REWARD_GLOBAL_SCALE: 1.0
+  REWARD_COLLISION_PENALTY: -0.5
+  REWARD_ESCAPE_COLLISION_BONUS: 0.4
+  REWARD_BAD_STOP_PENALTY: -8.0
+  STOP_ACTION_ID: 0
+  STOP_SUCCESS_DISTANCE: 1.0
+  COLLISION_REWARD_THRESHOLD: -4.0
+  REWARD_MIN_CLIP: -100.0
+  REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   TYPE: "OfflineRL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
@@ -95,7 +106,7 @@ TRAIN:
     ONLINE_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
     RANDOM_SHARD_RELOAD: True
-    RANDOM_SHARDS_PER_EPOCH: 12
+    RANDOM_SHARDS_PER_EPOCH: 28
     RELOAD_SHARDS_EVERY_EPOCHS: 10
     RANDOM_SHARD_SEED: 0
     PREFETCH_FACTOR: 2
@@ -137,7 +148,7 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_multiple"
+  SPLIT: "val_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"

@@ -1,6 +1,7 @@
 import os
 import pickle
 import random
+from typing import Any
 
 import numpy as np
 import torch
@@ -29,6 +30,163 @@ class LoadLmdb:
         dones = cls._flatten_sequence(data.get("done", []))
         n = min(len(action_id), len(rewards), len(dones))
         return action_id[:n], rewards[:n], dones[:n]
+
+    @classmethod
+    def _safe_to_bool(cls, value, default=False):
+        if value is None:
+            return default
+        try:
+            return bool(value)
+        except Exception:
+            return default
+
+    @classmethod
+    def _safe_to_int(cls, value, default=None):
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    @classmethod
+    def _safe_to_float(cls, value, default=None):
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    @classmethod
+    def _get_info_list(cls, data, n):
+        info = data.get("info", [])
+        if isinstance(info, np.ndarray):
+            info = info.reshape(-1).tolist()
+        elif not isinstance(info, list):
+            info = cls._flatten_sequence(info)
+        if len(info) < n:
+            info = list(info) + [None] * (n - len(info))
+        return info[:n]
+
+    @classmethod
+    def _infer_collision_mask(cls, data, rewards, info_list, n, config):
+        raw = data.get("collision", None)
+        if raw is not None:
+            vals = cls._flatten_sequence(raw)
+            mask = [cls._safe_to_bool(v, default=False) for v in vals[:n]]
+            if len(mask) < n:
+                mask.extend([False] * (n - len(mask)))
+            return mask
+
+        # 从 info 中兜底推断碰撞标记
+        mask = []
+        for i in range(n):
+            item = info_list[i]
+            collided = None
+            if isinstance(item, dict):
+                for key in ("is_collided", "collision", "collided", "collode"):
+                    if key in item:
+                        collided = cls._safe_to_bool(item.get(key), default=False)
+                        break
+            if collided is None:
+                threshold = float(getattr(config, "COLLISION_REWARD_THRESHOLD", -4.0))
+                collided = float(rewards[i]) <= threshold
+            mask.append(collided)
+        return mask
+
+    @classmethod
+    def _extract_distance_to_goal(cls, info_item: Any):
+        if not isinstance(info_item, dict):
+            return None
+        for key in ("distance_to_goal", "geodesic_distance", "euclidian_distance"):
+            if key not in info_item:
+                continue
+            value = info_item[key]
+            if isinstance(value, (list, tuple, np.ndarray)):
+                if len(value) == 0:
+                    continue
+                value = value[0]
+            dist = cls._safe_to_float(value, default=None)
+            if dist is not None:
+                return dist
+        return None
+
+    @classmethod
+    def _extract_success(cls, info_item: Any):
+        if not isinstance(info_item, dict):
+            return None
+        if "success" not in info_item:
+            return None
+        value = info_item["success"]
+        if isinstance(value, (list, tuple, np.ndarray)):
+            if len(value) == 0:
+                return None
+            value = value[0]
+        return cls._safe_to_bool(value, default=False)
+
+    @classmethod
+    def _reshape_rewards(cls, data, action_id, rewards, dones, config):
+        n = min(len(action_id), len(rewards), len(dones))
+        if n <= 0:
+            return rewards
+        if not bool(getattr(config, "REWARD_SCALE_ENABLE", False)):
+            return rewards
+
+        rewards = [float(v) for v in rewards[:n]]
+        action_id = action_id[:n]
+        dones = dones[:n]
+        info_list = cls._get_info_list(data, n)
+        collision_mask = cls._infer_collision_mask(
+            data=data,
+            rewards=rewards,
+            info_list=info_list,
+            n=n,
+            config=config,
+        )
+
+        reward_global_scale = float(getattr(config, "REWARD_GLOBAL_SCALE", 1.0))
+        reward_collision_penalty = float(getattr(config, "REWARD_COLLISION_PENALTY", -0.2))
+        reward_escape_collision_bonus = float(
+            getattr(config, "REWARD_ESCAPE_COLLISION_BONUS", 0.3)
+        )
+        reward_bad_stop_penalty = float(getattr(config, "REWARD_BAD_STOP_PENALTY", -5.0))
+        stop_action_id = int(getattr(config, "STOP_ACTION_ID", 0))
+        stop_success_distance = float(getattr(config, "STOP_SUCCESS_DISTANCE", 1.0))
+        reward_min_clip = getattr(config, "REWARD_MIN_CLIP", None)
+        reward_max_clip = getattr(config, "REWARD_MAX_CLIP", None)
+        clip_lo = float(reward_min_clip) if reward_min_clip is not None else -np.inf
+        clip_hi = float(reward_max_clip) if reward_max_clip is not None else np.inf
+
+        shaped = []
+        for i in range(n):
+            r = rewards[i] * reward_global_scale
+            collided = collision_mask[i]
+            prev_collided = collision_mask[i - 1] if i > 0 else False
+
+            if collided:
+                # 加大碰撞惩罚
+                r += reward_collision_penalty
+            if prev_collided and not collided:
+                # 鼓励脱离连续碰撞
+                r += reward_escape_collision_bonus
+
+            action = cls._safe_to_int(action_id[i], default=None)
+            done = cls._safe_to_bool(dones[i], default=False)
+            if done and action == stop_action_id:
+                dist = cls._extract_distance_to_goal(info_list[i])
+                succ = cls._extract_success(info_list[i])
+                bad_stop = False
+                if dist is not None:
+                    bad_stop = dist > stop_success_distance
+                elif succ is not None:
+                    bad_stop = not succ
+                if bad_stop:
+                    r += reward_bad_stop_penalty
+
+            r = float(np.clip(r, clip_lo, clip_hi))
+            shaped.append(r)
+        return shaped
 
     @classmethod
     def get_files(cls, path):
@@ -212,6 +370,13 @@ class LoadLmdb:
 
             obs = data['obs']
             action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
 
             # 编码整个轨迹
             encoded_audio_states = []
@@ -317,6 +482,13 @@ class LoadLmdb:
 
             obs = data['obs']
             action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
 
             # 编码整个轨迹
             encoded_states = []
@@ -409,6 +581,13 @@ class LoadLmdb:
 
             obs = data['obs']
             action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
 
             # 编码整个轨迹
             encoded_states = []
@@ -529,6 +708,13 @@ class LoadLmdb:
             action_id = np.array(data['action_id']).reshape(-1).tolist()
             rewards = np.array(data['reward']).reshape(-1).tolist()
             dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
     
             chunk_audio_now, chunk_trgb_now, chunk_tdepth_now = [], [], []
             chunk_audio_next, chunk_trgb_next, chunk_tdepth_next = [], [], []
@@ -696,6 +882,13 @@ class LoadLmdb:
             action_id = np.array(data["action_id"]).reshape(-1).tolist()
             rewards = np.array(data["reward"]).reshape(-1).tolist()
             dones = np.array(data["done"]).reshape(-1).tolist()
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
 
             for i in range(len(obs) - 1):
                 v_now = obs[i]
