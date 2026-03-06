@@ -111,6 +111,27 @@ def Train(model ,trainer , config , device = None , **kwargs):
             config = config
         )
         trainer.train()
+    elif config.TYPE == "OnlineRL":
+        from torch.utils.tensorboard import SummaryWriter
+
+        if device is None:
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        save_dir, loss_dir = _build_auto_run_dirs(config)
+        writer = SummaryWriter(log_dir=loss_dir)
+        print(f"[Train] checkpoint dir: {save_dir}")
+        print(f"[Train] tensorboard loss dir: {loss_dir}")
+
+        env = kwargs["env"]
+        trainer = trainer(
+            env=env,
+            agent=model,
+            writer=writer,
+            device=device,
+            epoch=config.num_epochs,
+            save_dir=save_dir,
+            config=config,
+        )
+        trainer.train()
         
     else:
         from torch.utils.tensorboard import SummaryWriter

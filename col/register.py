@@ -13,6 +13,37 @@ import numpy as np
 import habitat_sim
 import math
 from utils.visualizations import plot_top_down_map , draw_point
+
+
+def _rotation_to_list(rotation):
+    if rotation is None:
+        return None
+    if isinstance(rotation, (list, tuple, np.ndarray)):
+        return np.asarray(rotation, dtype=np.float32).reshape(-1).tolist()
+    if all(hasattr(rotation, k) for k in ("x", "y", "z", "w")):
+        return [float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w)]
+    if all(hasattr(rotation, k) for k in ("w", "x", "y", "z")):
+        return [float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w)]
+    try:
+        return np.asarray(rotation, dtype=np.float32).reshape(-1).tolist()
+    except Exception:
+        return None
+
+
+def _collect_pose(sim):
+    state = sim.get_agent_state()
+    return {
+        "position": np.asarray(state.position, dtype=np.float32).reshape(-1).tolist(),
+        "rotation": _rotation_to_list(state.rotation),
+    }
+
+
+def _append_pose_if_needed(save_data, sim, kwargs):
+    if "obs" not in kwargs:
+        return
+    if "pose" not in save_data:
+        save_data["pose"] = []
+    save_data["pose"].append(_collect_pose(sim))
 class REGISTER:
     def __init__(self):
         self._registry = {}
@@ -59,6 +90,7 @@ class AngleCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, scene , id):
         os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
         
@@ -103,6 +135,7 @@ class GreedyCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, scene , id):
         os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
         
@@ -145,6 +178,7 @@ class CollidedCollect:
             if key not in self.save_data:
                 self.save_data[key] = []
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
 
     def _policy_action(self, obs):
         rgb = torch.from_numpy(obs['rgb']).float() / 255.0
@@ -323,6 +357,7 @@ class RandomCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, scene , id):
         os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
         
@@ -442,6 +477,7 @@ class OfflineCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -485,6 +521,7 @@ class RandomCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, scene , id):
         os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}",exist_ok=True)
         
@@ -610,6 +647,7 @@ class OfflineCollect:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -684,6 +722,7 @@ class OffflineLevel:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -776,6 +815,7 @@ class OfflineVersion1:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -896,6 +936,7 @@ class OfflineVersion2:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -1029,6 +1070,7 @@ class OfflineVersion3:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         
@@ -1162,6 +1204,7 @@ class OfflineVersionSoundspaces2:
     def save(self , **kwargs):
         for key , value in kwargs.items():
             self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
     def store(self, level , scene , id):
         os.makedirs(f"{self.save_data_dir}/{level}/{scene[-15:-4]}",exist_ok=True)
         

@@ -1,8 +1,8 @@
-model = "gpt-5-codex-2025-09-15"
+model = "gpt-5.3-codex-2026-02-24"
 model_provider = "azure"
 
 [model_providers.azure]
-name = "gpt-5-codex-2025-09-15"
+name = "gpt-5.3-codex-2026-02-24"
 base_url = "https://litellm.mybigai.ac.cn/"
 env_key = "OPENAI_API_KEY"
 wire_api = "responses"

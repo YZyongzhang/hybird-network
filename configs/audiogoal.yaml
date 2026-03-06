@@ -59,9 +59,9 @@ COLLECT:
 
 PT:
   OPEN: False
-  TYPE: "offlinelstm_v15"
-  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(muti_collided)"
-  TO_PATH: "media/pt/offline_LSTM_muti_embedding_collided_reward_scaled"
+  TYPE: "offlinetransformer_v16" # offlinelstm_v15 | offlinetransformer_v16
+  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+  TO_PATH: "media/pt/offline_LSTM_muti_embedding_reward_scaled"
   CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
@@ -73,14 +73,14 @@ PT:
   REWARD_ESCAPE_COLLISION_BONUS: 0.4
   REWARD_BAD_STOP_PENALTY: -8.0
   STOP_ACTION_ID: 0
-  STOP_SUCCESS_DISTANCE: 1.0
+  STOP_SUCCESS_DISTANCE: 0
   COLLISION_REWARD_THRESHOLD: -4.0
   REWARD_MIN_CLIP: -100.0
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
   OPEN: True
-  TYPE: "OfflineRL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL
+  TYPE: "OfflineRL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
@@ -92,7 +92,7 @@ TRAIN:
 
   OFFLINE:
     TYPE: "OfflineRL"
-    model: "v1_5"  # v1 | v1_3 | v1_4 | v1_5 | v2 | v4 | v5
+    model: "v1_6"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
     buffer: False
     SAVE_LOADER: False
 
@@ -101,8 +101,8 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/offline_LSTM_muti_embedding"
-      - "media/pt/offline_LSTM_muti_embedding_collided"
+      - "media/pt/offline_LSTM_muti_embedding_reward_scaled"
+      - "media/pt/offline_LSTM_muti_embedding_collided_reward_scaled"
     ONLINE_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
     RANDOM_SHARD_RELOAD: True
@@ -122,7 +122,7 @@ TRAIN:
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
-    lr: 0.0005
+    lr: 0.0002
     target_entropy: 0.8
     tau: 0.005
     beta: 0.5
@@ -130,16 +130,73 @@ TRAIN:
     lstm_hidden_dim: 256
     lstm_num_layers: 1
     lstm_seq_len: 5
+    transformer_dim: 256
+    transformer_heads: 4
+    transformer_layers: 2
+    transformer_ffn_dim: 512
+    max_seq_len: 16
+
+  ONLINE:
+    TYPE: "OnlineRL"
+    experiment: "v1_freeze"  # custom | v1_freeze | v2_scratch
+    model: "v2"  # used when experiment=custom. v1: foundation init, v2: random init
+    EXPERIMENT_CKPT_DIR: "media/ONLINE"
+    LOAD_PATH: False
+    MODEL_PATH: ""
+
+    FOUNDATION_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"  # required for v1_freeze/custom-v1, ignored in v2_scratch
+    freeze_backbone: False  # forced True in v1_freeze, forced False in v2_scratch
+    use_pose_encoder: True
+    pose_dim: 7
+    pose_hidden_dim: 64
+
+    MAX_STEPS: 200
+    num_epochs: 300000
+    save_every: 10
+    log_interval: 20
+
+    action_dim: 4
+    hidden_dim: 256
+    lr: 0.0003
+    critic_lr: 0.0003
+    alpha_lr: 0.0001
+    gamma: 0.99
+    tau: 0.005
+    target_entropy: 1.08  # 0.8 * 1.386
+    batch_size: 128
+    buffer_size: 5000
+    warmup_steps: 500
+    updates_per_step: 1
+    max_grad_norm: 1.0
+    log_alpha_min: -10.0
+    log_alpha_max: 2.0
+    q_target_min: -100.0
+    q_target_max: 100.0
+    REWARD_SHAPING_ENABLE: True
+    REWARD_GLOBAL_SCALE: 1.0
+    REWARD_COLLISION_PENALTY: -0.5
+    REWARD_ESCAPE_COLLISION_BONUS: 1.0
+    REWARD_BAD_STOP_PENALTY: -8.0
+    STOP_ACTION_ID: 0
+    STOP_SUCCESS_DISTANCE: 0.0
+    REWARD_MIN_CLIP:
+    REWARD_MAX_CLIP:
 
 EVAL:
   OPEN: False
-  TYPE: "OfflineRL_v1_3"  # OfflineRL_v1_3 | OfflineRL_v1_5
+  TYPE: "OnlineRL"  # OfflineRL_v1_3 | OfflineRL_v1_5 | OnlineRL
   HYBRID_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
   SAC_CKPT: "final/telephone/ckpt/8/sac_2level_model_300.pth"
   EPISODES: 0
   MAX_STEPS: 200
   SEED: 0
   STOCHASTIC_SAC: False
+  # Used when TYPE is OnlineRL
+  ONLINE_MODEL: "v2"  # v1 | v2
+  ONLINE_MODEL_PATH: "media/ONLINE/20260304_112625/onlinerl_epoch_2310.pth"
+  ONLINE_GREEDY: False
+  ONLINE_LOG_EVERY: 1
+  ONLINE_DATASET_SPLIT: "val_multiple"
   # Optional for v1_5 separate-weight eval
   TEMPORAL_CKPT: ""
   ACTOR_CKPT: ""
@@ -148,7 +205,7 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_multiple"
+  SPLIT: "train_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"

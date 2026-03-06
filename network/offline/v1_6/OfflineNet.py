@@ -12,6 +12,8 @@ class PolicyNet(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
         x = F.relu(self.fc1(x))
         logits = self.fc2(x)
         return F.softmax(logits, dim=-1)
@@ -28,10 +30,10 @@ class QValueNet(nn.Module):
         return self.fc2(x)
 
 
-class SAC_LSTM_CQL_v1_5(nn.Module):
+class SAC_Transformer_CQL_v1_6(nn.Module):
     """
-    Offline SAC-CQL with LSTM temporal encoder.
-    Input states are pre-encoded features from VADE (shape: [B, T, D]).
+    Offline SAC-CQL with Transformer temporal encoder.
+    Input states are pre-encoded features from PT shards (shape: [B, T, D]).
     """
 
     def __init__(
@@ -47,8 +49,11 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
         gamma,
         beta,
         device,
-        lstm_hidden_dim=256,
-        lstm_num_layers=1,
+        transformer_dim=256,
+        transformer_heads=4,
+        transformer_layers=2,
+        transformer_ffn_dim=512,
+        max_seq_len=16,
     ):
         super().__init__()
         self.device = device
@@ -58,22 +63,35 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
         self.target_entropy = target_entropy
         self.clip_grad_param = 1.0
 
-        self.temporal_encoder = nn.LSTM(
-            input_size=state_dim,
-            hidden_size=lstm_hidden_dim,
-            num_layers=lstm_num_layers,
+        self.input_proj = nn.Linear(state_dim, transformer_dim).to(device)
+        self.pos_embedding = nn.Parameter(
+            torch.zeros(1, max_seq_len, transformer_dim, device=device)
+        )
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=transformer_dim,
+            nhead=transformer_heads,
+            dim_feedforward=transformer_ffn_dim,
             batch_first=True,
+            activation="gelu",
+        )
+        self.temporal_encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=transformer_layers
         ).to(device)
 
-        self.actor = PolicyNet(lstm_hidden_dim, hidden_dim, action_dim).to(device)
-        self.critic_1 = QValueNet(lstm_hidden_dim, hidden_dim, action_dim).to(device)
-        self.critic_2 = QValueNet(lstm_hidden_dim, hidden_dim, action_dim).to(device)
-        self.target_critic_1 = QValueNet(lstm_hidden_dim, hidden_dim, action_dim).to(device)
-        self.target_critic_2 = QValueNet(lstm_hidden_dim, hidden_dim, action_dim).to(device)
+        self.actor = PolicyNet(transformer_dim, hidden_dim, action_dim).to(device)
+        self.critic_1 = QValueNet(transformer_dim, hidden_dim, action_dim).to(device)
+        self.critic_2 = QValueNet(transformer_dim, hidden_dim, action_dim).to(device)
+        self.target_critic_1 = QValueNet(transformer_dim, hidden_dim, action_dim).to(device)
+        self.target_critic_2 = QValueNet(transformer_dim, hidden_dim, action_dim).to(device)
         self.target_critic_1.load_state_dict(self.critic_1.state_dict())
         self.target_critic_2.load_state_dict(self.critic_2.state_dict())
 
-        self.temporal_optimizer = torch.optim.Adam(self.temporal_encoder.parameters(), lr=actor_lr)
+        self.temporal_optimizer = torch.optim.Adam(
+            list(self.input_proj.parameters())
+            + list(self.temporal_encoder.parameters())
+            + [self.pos_embedding],
+            lr=actor_lr,
+        )
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_1_optimizer = torch.optim.Adam(self.critic_1.parameters(), lr=critic_lr)
         self.critic_2_optimizer = torch.optim.Adam(self.critic_2.parameters(), lr=critic_lr)
@@ -94,8 +112,15 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
 
     def _encode_sequence(self, seq):
         seq = self._to_seq_batch(seq)
-        encoded, _ = self.temporal_encoder(seq)
-        return encoded
+        seq_len = seq.shape[1]
+        if seq_len > self.pos_embedding.shape[1]:
+            raise ValueError(
+                f"sequence length {seq_len} exceeds max_seq_len {self.pos_embedding.shape[1]}"
+            )
+        x = self.input_proj(seq)
+        x = x + self.pos_embedding[:, :seq_len, :]
+        x = self.temporal_encoder(x)
+        return x
 
     def _flatten_time(self, x):
         return x.reshape(-1, x.shape[-1])
@@ -125,22 +150,22 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
             entropy = -torch.sum(next_probs * next_log_probs, dim=1, keepdim=True)
             q1_value = self.target_critic_1(next_states)
             q2_value = self.target_critic_2(next_states)
-            min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value), dim=1, keepdim=True)
+            min_qvalue = torch.sum(
+                next_probs * torch.min(q1_value, q2_value), dim=1, keepdim=True
+            )
             next_value = min_qvalue + self.log_alpha.exp() * entropy
             td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
     def soft_update(self, net, target_net):
         for target_param, param in zip(target_net.parameters(), net.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - self.tau) + param.data * self.tau)
+            target_param.data.copy_(
+                target_param.data * (1.0 - self.tau) + param.data * self.tau
+            )
 
     def update(self, states, actions, rewards, next_states, dones):
         seq_states = self._encode_sequence(states)
-        seq_next_states = self._encode_sequence(next_states)
-
-        states_flat = self._flatten_time(seq_states)
-        next_states_flat = self._flatten_time(seq_next_states)
-        # states_actor = states_flat.detach()
+        states_flat = self._flatten_time(seq_states).detach()
 
         rewards = self._reshape_vector(rewards).float().to(self.device)
         dones = self._reshape_vector(dones).float().to(self.device)
@@ -162,11 +187,9 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
-        
-        # 更新 critic 网络，重新进行LSTM的encode
+
         seq_states = self._encode_sequence(states)
         seq_next_states = self._encode_sequence(next_states)
-
         states_flat = self._flatten_time(seq_states)
         next_states_flat = self._flatten_time(seq_next_states)
         td_target = self.calc_target(rewards, next_states_flat, dones).detach()
@@ -178,12 +201,13 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
         critic_2_q_values = self.critic_2(states_flat)
         critic_2_q_taken = critic_2_q_values.gather(1, actions).squeeze(1)
         critic_2_loss = torch.mean(F.mse_loss(critic_2_q_taken, td_target))
-        
-        # 从公式上来看，cql这里的实现有一些问题。目前先不动这个。控制变量。
-        # cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values.mean()
-        # cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values.mean()
-        cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_taken.mean()
-        cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_taken.mean()
+
+        cql1_scaled_loss = (
+            torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_taken.mean()
+        )
+        cql2_scaled_loss = (
+            torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_taken.mean()
+        )
 
         cql_1_loss = critic_1_loss + self.beta * cql1_scaled_loss
         cql_2_loss = critic_2_loss + self.beta * cql2_scaled_loss
@@ -194,7 +218,9 @@ class SAC_LSTM_CQL_v1_5(nn.Module):
         self.critic_2_optimizer.zero_grad()
         total_critic_loss.backward()
 
+        clip_grad_norm_(self.input_proj.parameters(), self.clip_grad_param)
         clip_grad_norm_(self.temporal_encoder.parameters(), self.clip_grad_param)
+        clip_grad_norm_([self.pos_embedding], self.clip_grad_param)
         clip_grad_norm_(self.critic_1.parameters(), self.clip_grad_param)
         clip_grad_norm_(self.critic_2.parameters(), self.clip_grad_param)
 

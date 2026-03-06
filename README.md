@@ -89,6 +89,34 @@ python run.py
 python run.py
 ```
 
+## OnlineRL v1/v2 训练流程
+在 `configs/audiogoal.yaml` 中设置：
+- `TRAIN.OPEN: True`
+- `TRAIN.TYPE: OnlineRL`
+- `TRAIN.ONLINE.experiment: v1_freeze` 或 `v2_scratch`（推荐）
+- `TRAIN.ONLINE.action_dim`: 环境动作数（通常 4）
+- `TRAIN.ONLINE.num_epochs`、`TRAIN.ONLINE.MAX_STEPS`、`TRAIN.ONLINE.lr` 等训练超参
+
+`v1_freeze`（冻结 foundation）：
+- 自动使用 `v1`
+- 自动 `freeze_backbone=True`
+- 必填 `TRAIN.ONLINE.FOUNDATION_CKPT`
+
+`v2_scratch`（从头训练）：
+- 自动使用 `v2`
+- 自动忽略 `FOUNDATION_CKPT`
+- 自动 `freeze_backbone=False`
+
+如需完全手动控制，设置 `TRAIN.ONLINE.experiment: custom`，再用：
+- `TRAIN.ONLINE.model: v1` 或 `v2`
+- `TRAIN.ONLINE.freeze_backbone: True/False`
+- `TRAIN.ONLINE.FOUNDATION_CKPT`
+
+运行：
+```bash
+python run.py
+```
+
 ### 2) 训练 OfflineRL v1_5（LSTM）
 在 `configs/audiogoal.yaml` 中设置：
 - `TRAIN.OPEN: True`

@@ -408,6 +408,87 @@ class OnlineTest:
         eps = float(self.env._env.number_of_episodes)
         return total_reward / eps, total_spl / eps
     
+    def rollout_transformer_v16(self, epoch, sac_model, logger):
+        """
+        v1_6: hybrid embedding (two-frame) + transformer policy over encoded sequence.
+        """
+        total_reward = 0.0
+        total_spl = 0.0
+        default_seq = int(getattr(self.config, "lstm_seq_len", 5))
+        seq_len = int(getattr(self.config, "transformer_seq_len", default_seq))
+        max_seq_len = int(getattr(self.config, "max_seq_len", seq_len))
+        seq_len = max(1, min(seq_len, max_seq_len))
+        max_steps = int(getattr(self.config, "MAX_STEPS", 200))
+
+        for _ in tqdm(range(self.env._env.number_of_episodes), desc="onlinetest"):
+            obs = self.env.reset()
+            scene = self.env._env.current_episode.scene_id[-15:-4]
+            episode_id = self.env._env.current_episode.episode_id
+            logger.info(f"{epoch} , scene is {scene}  , episodeid is {episode_id}")
+
+            done = False
+            step = 0
+            episode_reward = 0.0
+            info = {"spl": 0.0, "distance_to_goal": -1.0}
+            pre_rgb = None
+            pre_depth = None
+            state_queue = deque(maxlen=seq_len)
+
+            while (not done) and (step < max_steps):
+                with torch.no_grad():
+                    rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
+                    depth = torch.from_numpy(obs["depth"]).float()
+                    audio = self._get_audio_tensor(obs)
+                    if pre_rgb is None:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
+                    trgb = torch.cat([pre_rgb, rgb], dim=2)
+                    tdepth = torch.cat([pre_depth, depth], dim=2)
+                    state = (
+                        self.hybirdmodel.embedding_forward(
+                            audio.to(self.device),
+                            trgb.to(self.device),
+                            tdepth.to(self.device),
+                        )
+                        .detach()
+                        .cpu()
+                    )
+                    state_queue.append(state)
+
+                    while len(state_queue) < seq_len:
+                        state_queue.appendleft(torch.zeros_like(state))
+                    seq_state = torch.stack(list(state_queue), dim=0).unsqueeze(0)
+                    action_sac = self._to_env_action(
+                        sac_model.get_action(seq_state.to(self.device), eval=True)
+                    )
+                    action_hybird = int(
+                        self.hybirdmodel(
+                            audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
+                        )
+                        .argmax(dim=1)
+                        .item()
+                    )
+                    pre_rgb = rgb
+                    pre_depth = depth
+
+                obs, reward, done, info = self.env.step(action=action_sac)
+                logger.info(
+                    f"take action sac model {action_sac} ,reward {reward} , step {step} , "
+                    f"done {done} , is collided {self.sim.previous_step_collided}"
+                )
+                episode_reward += float(reward)
+                step += 1
+
+            logger.info(
+                f"episode is done , distance_to_goal is {info['distance_to_goal']}, "
+                f"spl is {info['spl']} \nsumreward is {episode_reward}"
+            )
+            total_reward += episode_reward
+            total_spl += float(info.get("spl", 0.0))
+
+        eps = float(self.env._env.number_of_episodes)
+        return total_reward / eps, total_spl / eps
+
 
     def rollout(self , epoch , sac_model , logger):
         if self.config.model == "v1":
@@ -422,5 +503,7 @@ class OnlineTest:
             return self.rollout_lstm_attention(epoch , sac_model , logger)
         elif self.config.model == 'v1_5':
             return self.rollout_lstm_v15(epoch, sac_model, logger)
+        elif self.config.model == 'v1_6':
+            return self.rollout_transformer_v16(epoch, sac_model, logger)
         raise ValueError(f"Unsupported online test model: {self.config.model}")
     
