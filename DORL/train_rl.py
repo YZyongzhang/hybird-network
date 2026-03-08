@@ -104,6 +104,10 @@ class DORLTrainConfig:
     greedy_decay_epochs: int = 25
     tb_log_dir: str = "media/DORL/log"
     log_interval: int = 100
+    # Cancel pre-applied reward global scale in PT by dividing reward with this factor.
+    reward_unscale_enable: bool = False
+    reward_scale_factor: float = 1.0
+    mismatch_reward: float = -10.0
 
 
 class DORLSACTrainer:
@@ -204,6 +208,14 @@ class DORLSACTrainer:
                 return int(torch.argmax(probs, dim=-1).item())
             dist = torch.distributions.Categorical(probs=probs)
             return int(dist.sample().item())
+
+    # def _compensate_reward_scale(self, reward: float) -> float:
+    #     if not bool(self.cfg.reward_unscale_enable):
+    #         return float(reward)
+    #     scale = float(self.cfg.reward_scale_factor)
+    #     if abs(scale) < 1e-8:
+    #         return float(reward)
+    #     return float(reward) / scale
 
     def _soft_update(self, src: nn.Module, dst: nn.Module) -> None:
         for p_src, p_dst in zip(src.parameters(), dst.parameters()):
@@ -441,23 +453,14 @@ class DORLSACTrainer:
 
 
 def run_dorl_train(
-    dorl_pt_root: str = "media/pt/offline_muti_embedding_DORL",
+    dorl_pt_root,
+    mismatch_reward: float = -10.0,
     config: Optional[DORLTrainConfig] = None,
 ) -> List[Dict[str, float]]:
-    env = build_env_from_dorl_pt(root=dorl_pt_root, random_episode=True)
+    env = build_env_from_dorl_pt(
+        root=dorl_pt_root,
+        random_episode=True,
+        mismatch_reward=float(mismatch_reward),
+    )
     trainer = DORLSACTrainer(env=env, config=config)
     return trainer.train()
-
-
-if __name__ == "__main__":
-    cfg = DORLTrainConfig(
-        action_dim=4,
-        train_epochs=30,
-        episodes_per_epoch=200,
-        max_steps=200,
-        ckpt_dir="media/DORL/ckpt",
-    )
-    run_dorl_train(
-        dorl_pt_root="media/pt/offline_muti_embedding_DORL",
-        config=cfg,
-    )

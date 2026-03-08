@@ -655,6 +655,58 @@ def _run_train(config, train_config):
         logger.info("train finished: OnlineRL")
         return
 
+    if train_config.TYPE == "DORL":
+        from DORL.train_rl import DORLTrainConfig, run_dorl_train
+
+        dorl_config = train_config.DORL
+        target_entropy = getattr(dorl_config, "target_entropy", None)
+        if target_entropy in ("", "None"):
+            target_entropy = None
+        elif target_entropy is not None:
+            target_entropy = float(target_entropy)
+
+        dorl_cfg = DORLTrainConfig(
+            action_dim=int(getattr(dorl_config, "action_dim", 4)),
+            hidden_dim=int(getattr(dorl_config, "hidden_dim", 256)),
+            actor_lr=float(getattr(dorl_config, "actor_lr", 3e-4)),
+            critic_lr=float(getattr(dorl_config, "critic_lr", 3e-4)),
+            alpha_lr=float(getattr(dorl_config, "alpha_lr", 1e-4)),
+            target_entropy=target_entropy,
+            gamma=float(getattr(dorl_config, "gamma", 0.99)),
+            tau=float(getattr(dorl_config, "tau", 0.005)),
+            batch_size=int(getattr(dorl_config, "batch_size", 256)),
+            buffer_size=int(getattr(dorl_config, "buffer_size", 200000)),
+            warmup_steps=int(getattr(dorl_config, "warmup_steps", 2000)),
+            updates_per_step=int(getattr(dorl_config, "updates_per_step", 1)),
+            max_grad_norm=float(getattr(dorl_config, "max_grad_norm", 1.0)),
+            q_target_min=float(getattr(dorl_config, "q_target_min", -100.0)),
+            q_target_max=float(getattr(dorl_config, "q_target_max", 100.0)),
+            log_alpha_min=float(getattr(dorl_config, "log_alpha_min", -10.0)),
+            log_alpha_max=float(getattr(dorl_config, "log_alpha_max", 2.0)),
+            train_epochs=int(getattr(dorl_config, "train_epochs", 50)),
+            episodes_per_epoch=int(getattr(dorl_config, "episodes_per_epoch", 0)),
+            max_steps=int(getattr(dorl_config, "max_steps", 200)),
+            save_every=int(getattr(dorl_config, "save_every", 5)),
+            ckpt_dir=str(getattr(dorl_config, "ckpt_dir", "media/DORL/ckpt")),
+            stochastic_policy=bool(getattr(dorl_config, "stochastic_policy", True)),
+            greedy_prob_start=float(getattr(dorl_config, "greedy_prob_start", 0.15)),
+            greedy_prob_end=float(getattr(dorl_config, "greedy_prob_end", 0.02)),
+            greedy_decay_epochs=int(getattr(dorl_config, "greedy_decay_epochs", 25)),
+            tb_log_dir=str(getattr(dorl_config, "tb_log_dir", "media/DORL/log")),
+            log_interval=int(getattr(dorl_config, "log_interval", 100)),
+            reward_unscale_enable=bool(getattr(dorl_config, "reward_unscale_enable", False)),
+            reward_scale_factor=float(getattr(dorl_config, "reward_scale_factor", 1.0)),
+            mismatch_reward=float(getattr(dorl_config, "mismatch_reward", -10.0)),
+        )
+        dorl_pt_root = str(getattr(dorl_config, "DORL_PT_ROOT", "media/pt/offline_muti_embedding_DORL"))
+        run_dorl_train(
+            dorl_pt_root=dorl_pt_root,
+            mismatch_reward=float(getattr(dorl_config, "mismatch_reward", -10.0)),
+            config=dorl_cfg,
+        )
+        logger.info("train finished: DORL")
+        return
+
     raise ValueError(f"Unsupported TRAIN.TYPE: {train_config.TYPE}")
 
 

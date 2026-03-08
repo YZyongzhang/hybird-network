@@ -467,7 +467,7 @@ def build_env_offline_15_and_collided(
 
 def build_env_from_dorl_pt(
     *,
-    root: Union[str, Path] = "media/pt/offline_muti_embedding_DORL",
+    root: Union[str, Path] = "",
     pattern: str = "dorl_episode_shard_*.pt",
     random_episode: bool = False,
     mismatch_reward: float = -10.0,

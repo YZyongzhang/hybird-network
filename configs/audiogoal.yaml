@@ -80,7 +80,7 @@ PT:
 
 TRAIN:
   OPEN: True
-  TYPE: "OfflineRL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL
+  TYPE: "DORL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL | DORL
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
@@ -182,6 +182,39 @@ TRAIN:
     REWARD_MIN_CLIP:
     REWARD_MAX_CLIP:
 
+  DORL:
+    DORL_PT_ROOT: "media/pt/offline_muti_embedding_DORL"
+    VAL_DORL_PT_ROOT: "data_DORL_pt_validation"
+    action_dim: 4
+    hidden_dim: 256
+    actor_lr: 0.0003
+    critic_lr: 0.0003
+    alpha_lr: 0.0001
+    target_entropy: 1.08
+    gamma: 0.99
+    tau: 0.005
+    batch_size: 256
+    buffer_size: 2000
+    warmup_steps: 2000
+    updates_per_step: 1
+    max_grad_norm: 1.0
+    q_target_min: -100.0
+    q_target_max: 100.0
+    log_alpha_min: -10.0
+    log_alpha_max: 2.0
+    train_epochs: 30
+    episodes_per_epoch: 0 # episodes_per_epoch = env.episodes
+    max_steps: 200
+    save_every: 5
+    ckpt_dir: "media/DORL/ckpt"
+    tb_log_dir: "media/DORL/log"
+    stochastic_policy: True
+    greedy_prob_start: 0.15
+    greedy_prob_end: 0.02
+    greedy_decay_epochs: 25
+    log_interval: 100
+    mismatch_reward: -1.0
+
 EVAL:
   OPEN: False
   TYPE: "OnlineRL"  # OfflineRL_v1_3 | OfflineRL_v1_5 | OnlineRL
@@ -202,6 +235,12 @@ EVAL:
   ACTOR_CKPT: ""
   CRITIC1_CKPT: ""
   CRITIC2_CKPT: ""
+  # DORL eval (train/eval_dorl.py)
+  DORL_MODEL_PATH: "media/DORL/ckpt/dorl_sac_epoch_30.pth"
+  DORL_HYBRID_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
+  DORL_DATASET_SPLIT: "val_multiple"
+  DORL_GREEDY: True
+  DORL_LOG_EVERY: 1
 
 DATASET:
   TYPE: "AudioNav"
