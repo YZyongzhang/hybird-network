@@ -271,11 +271,10 @@ class DORLSACTrainer:
 
         entropy = -torch.sum(probs * log_probs, dim=1).mean()
         alpha_loss = (alpha * (entropy.detach() - self.target_entropy)).mean()
-        # self.alpha_opt.zero_grad()
-        # alpha_loss.backward()
-        # self.alpha_opt.step()
-        with torch.no_grad():
-            self.log_alpha.clamp_(self.cfg.log_alpha_min, self.cfg.log_alpha_max)
+        
+        self.alpha_opt.zero_grad()
+        alpha_loss.backward()
+        self.alpha_opt.step()
 
         self._soft_update(self.q1, self.target_q1)
         self._soft_update(self.q2, self.target_q2)

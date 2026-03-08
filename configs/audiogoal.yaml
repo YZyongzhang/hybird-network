@@ -58,7 +58,7 @@ COLLECT:
   COLLECT_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
 PT:
-  OPEN: False
+  OPEN: True
   TYPE: "offlinetransformer_v16" # offlinelstm_v15 | offlinetransformer_v16
   RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
   TO_PATH: "media/pt/offline_LSTM_muti_embedding_reward_scaled"
@@ -79,7 +79,7 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   TYPE: "DORL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL | DORL
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
@@ -190,7 +190,7 @@ TRAIN:
     actor_lr: 0.0003
     critic_lr: 0.0003
     alpha_lr: 0.0001
-    target_entropy: 1.08
+    target_entropy: 0.2
     gamma: 0.99
     tau: 0.005
     batch_size: 256
