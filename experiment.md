@@ -63,5 +63,7 @@
 统一入口，减少手动改脚本和命令行参数的成本，确保可以快速复现实验并稳定对比 hybrid 与 v1_3 offline sac 的 SPL 等指标。
 
 
+### "media/HYBRID/20260307_235109/model_epoch_301.pth" val spl 0.16 test 0.10
+
 
 

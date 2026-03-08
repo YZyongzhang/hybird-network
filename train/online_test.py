@@ -408,9 +408,9 @@ class OnlineTest:
         eps = float(self.env._env.number_of_episodes)
         return total_reward / eps, total_spl / eps
     
-    def rollout_transformer_v16(self, epoch, sac_model, logger):
+    def rollout_transformer_v1_8(self, epoch, sac_model, logger):
         """
-        v1_6: hybrid embedding (two-frame) + transformer policy over encoded sequence.
+        v1_8 transformer path: hybrid embedding (two-frame) + causal-transformer policy.
         """
         total_reward = 0.0
         total_spl = 0.0
@@ -489,6 +489,12 @@ class OnlineTest:
         eps = float(self.env._env.number_of_episodes)
         return total_reward / eps, total_spl / eps
 
+    def rollout_transformer(self, epoch, sac_model, logger):
+        """
+        Backward-compatible wrapper.
+        """
+        return self.rollout_transformer_v1_8(epoch, sac_model, logger)
+
 
     def rollout(self , epoch , sac_model , logger):
         if self.config.model == "v1":
@@ -503,7 +509,10 @@ class OnlineTest:
             return self.rollout_lstm_attention(epoch , sac_model , logger)
         elif self.config.model == 'v1_5':
             return self.rollout_lstm_v15(epoch, sac_model, logger)
+        elif self.config.model == 'v1_8':
+            return self.rollout_transformer_v1_8(epoch, sac_model, logger)
         elif self.config.model == 'v1_6':
-            return self.rollout_transformer_v16(epoch, sac_model, logger)
+            logger.warning("online test model v1_6 is deprecated; using v1_8 rollout.")
+            return self.rollout_transformer_v1_8(epoch, sac_model, logger)
         raise ValueError(f"Unsupported online test model: {self.config.model}")
     

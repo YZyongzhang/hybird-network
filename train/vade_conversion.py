@@ -10,6 +10,23 @@ from tqdm import tqdm
 
 class LoadLmdb:
     @classmethod
+    def _normalize_raw_paths(cls, path):
+        if isinstance(path, (str, os.PathLike)):
+            paths = [os.fspath(path)]
+        else:
+            try:
+                paths = [os.fspath(p) for p in list(path)]
+            except TypeError as exc:
+                raise ValueError(
+                    "RAW_DATA_PATH must be a directory path or a sequence of directory paths."
+                ) from exc
+
+        if not paths:
+            raise ValueError("RAW_DATA_PATH is empty.")
+
+        return paths
+
+    @classmethod
     def _flatten_sequence(cls, value):
         if isinstance(value, np.ndarray):
             return value.reshape(-1).tolist()
@@ -189,16 +206,199 @@ class LoadLmdb:
         return shaped
 
     @classmethod
+    def Generate_DORL_PT(cls, path, model, config):
+        """
+        生成 DORL 可直接读取的 episode shards。
+
+        每个 episode 结构:
+            [
+                (state_embed, next_state_embed, reward, done, action),
+                ...
+            ]
+
+        输出文件:
+            dorl_episode_shard_{id}.pt
+        每个 pt 保存一个 episode 列表（list[episode]）。
+        """
+        files = None
+        # 支持 RAW_DATA_PATH 为:
+        # 1) 单个 pkl 文件（内部保存原始样本文件路径列表）
+        # 2) 单个目录
+        # 3) 目录列表
+        if isinstance(path, (str, os.PathLike)):
+            path_str = os.fspath(path)
+            if os.path.isfile(path_str):
+                with open(path_str, "rb") as f:
+                    files = pickle.load(f)
+            else:
+                files = cls.get_files(path=path_str)
+        else:
+            paths = cls._normalize_raw_paths(path)
+            # 兼容列表里只给了一个 pkl 文件清单路径的场景
+            if len(paths) == 1 and os.path.isfile(paths[0]):
+                with open(paths[0], "rb") as f:
+                    files = pickle.load(f)
+            else:
+                files = cls.get_files(path=paths)
+
+        if not isinstance(files, list) or len(files) == 0:
+            raise ValueError(
+                "Generate_DORL_PT failed to resolve input files from RAW_DATA_PATH. "
+                f"Got type={type(files).__name__}, size={len(files) if hasattr(files, '__len__') else 'N/A'}."
+            )
+
+        random.shuffle(files)
+        os.makedirs(config.TO_PATH, exist_ok=True)
+
+        episodes_per_shard = int(getattr(config, "EPISODES_PER_SHARD", 200))
+        if episodes_per_shard <= 0:
+            episodes_per_shard = 200
+
+        embed_batch_size = int(getattr(config, "EMBED_BATCH_SIZE", 64))
+        if embed_batch_size <= 0:
+            embed_batch_size = 64
+
+        device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+        shard_id = 0
+        total_episodes = 0
+        shard_episodes = []
+
+        def flush_shard():
+            nonlocal shard_id, total_episodes
+            if not shard_episodes:
+                return
+            shard_path = os.path.join(config.TO_PATH, f"dorl_episode_shard_{shard_id}.pt")
+            torch.save(shard_episodes, shard_path)
+            print(f"保存 DORL shard {shard_id}, episodes={len(shard_episodes)}")
+            total_episodes += len(shard_episodes)
+            shard_id += 1
+            shard_episodes.clear()
+
+        for file in tqdm(files, desc="Generate DORL PT"):
+            with open(file, "rb") as f:
+                data = pickle.load(f)
+
+            obs = data.get("obs", [])
+            action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
+            n = min(len(action_id), len(rewards), len(dones), max(0, len(obs) - 1))
+            if n <= 0:
+                continue
+
+            # 逐 step 构造 state 输入，按 batch 编码，避免显存峰值过高
+            encoded_states = []
+            chunk_audio, chunk_trgb, chunk_tdepth = [], [], []
+            pre_rgb, pre_depth = None, None
+
+            with torch.no_grad():
+                for i, v in enumerate(obs):
+                    rgb = torch.from_numpy(v["rgb"]).float() / 255.0
+                    depth = torch.from_numpy(v["depth"]).float()
+                    audio = torch.from_numpy(v["spectrogram"][0]).float()
+
+                    if i == 0:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
+
+                    trgb = torch.cat([pre_rgb, rgb], dim=2)
+                    tdepth = torch.cat([pre_depth, depth], dim=2)
+                    pre_rgb = rgb
+                    pre_depth = depth
+
+                    chunk_audio.append(audio)
+                    chunk_trgb.append(trgb)
+                    chunk_tdepth.append(tdepth)
+
+                    if len(chunk_audio) >= embed_batch_size:
+                        emb = model.embedding_forward(
+                            torch.stack(chunk_audio).to(device),
+                            torch.stack(chunk_trgb).to(device),
+                            torch.stack(chunk_tdepth).to(device),
+                        )
+                        if emb.dim() == 1:
+                            emb = emb.unsqueeze(0)
+                        emb = emb.detach().cpu()
+                        encoded_states.extend([emb[j] for j in range(emb.shape[0])])
+                        chunk_audio.clear()
+                        chunk_trgb.clear()
+                        chunk_tdepth.clear()
+
+                if chunk_audio:
+                    emb = model.embedding_forward(
+                        torch.stack(chunk_audio).to(device),
+                        torch.stack(chunk_trgb).to(device),
+                        torch.stack(chunk_tdepth).to(device),
+                    )
+                    if emb.dim() == 1:
+                        emb = emb.unsqueeze(0)
+                    emb = emb.detach().cpu()
+                    encoded_states.extend([emb[j] for j in range(emb.shape[0])])
+
+            if len(encoded_states) < n + 1:
+                continue
+
+            episode = []
+            for i in range(n):
+                episode.append(
+                    (
+                        encoded_states[i],
+                        encoded_states[i + 1],
+                        float(rewards[i]),
+                        bool(dones[i]),
+                        int(action_id[i]),
+                    )
+                )
+
+            shard_episodes.append(episode)
+            if len(shard_episodes) >= episodes_per_shard:
+                flush_shard()
+
+        flush_shard()
+        print(f"DORL PT 写入完成，总 episodes: {total_episodes}, 输出目录: {config.TO_PATH}")
+        return {
+            "output_dir": config.TO_PATH,
+            "total_episodes": total_episodes,
+            "num_shards": shard_id,
+            "episodes_per_shard": episodes_per_shard,
+            "embed_batch_size": embed_batch_size,
+        }
+
+    @classmethod
     def get_files(cls, path):
-        # 获取到object的路径
-        object_name_files = []
-        # parents = [os.path.join(path , i) for i in os.listdir(path = path)]
-        # for path in parents:
-        object_name_files.extend([os.path.join(path , i ) for i in os.listdir(path=path) if i != "a.md"])
+        # 获取 raw path 下各 scene 中的 pkl 文件。
+        # 支持单路径和路径列表，便于混合多个 raw dataset 一起生成 PT。
         files = []
-        
-        for scene in object_name_files:
-            files.extend([os.path.join(scene , i) for i in os.listdir(scene)])
+        for root in cls._normalize_raw_paths(path):
+            if not os.path.isdir(root):
+                raise ValueError(f"RAW_DATA_PATH is not a valid directory: {root}")
+
+            object_name_files = [
+                os.path.join(root, i)
+                for i in os.listdir(path=root)
+                if i != "a.md"
+            ]
+
+            for scene in object_name_files:
+                if os.path.isdir(scene):
+                    files.extend(
+                        [
+                            os.path.join(scene, i)
+                            for i in os.listdir(scene)
+                            if os.path.isfile(os.path.join(scene, i))
+                        ]
+                    )
+                elif os.path.isfile(scene):
+                    files.append(scene)
+
+        if not files:
+            raise ValueError(f"No files found from RAW_DATA_PATH={path}")
         return files
     @classmethod
     def load_pt(cls, path, config):

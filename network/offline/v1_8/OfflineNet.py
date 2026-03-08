@@ -30,10 +30,11 @@ class QValueNet(nn.Module):
         return self.fc2(x)
 
 
-class SAC_Transformer_CQL_v1_6(nn.Module):
+class SAC_Transformer_CQL_v1_8(nn.Module):
     """
-    Offline SAC-CQL with Transformer temporal encoder.
-    Input states are pre-encoded features from PT shards (shape: [B, T, D]).
+    Offline SAC-CQL with causal Transformer temporal encoder.
+    Input states are pre-encoded features from PT shards (shape: [B, T, D]),
+    compatible with previous LSTM v1_5 shards.
     """
 
     def __init__(
@@ -67,6 +68,7 @@ class SAC_Transformer_CQL_v1_6(nn.Module):
         self.pos_embedding = nn.Parameter(
             torch.zeros(1, max_seq_len, transformer_dim, device=device)
         )
+        self._causal_mask_cache = {}
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=transformer_dim,
             nhead=transformer_heads,
@@ -110,6 +112,17 @@ class SAC_Transformer_CQL_v1_6(nn.Module):
             seq = seq.unsqueeze(0)
         return seq.float().to(self.device)
 
+    def _get_causal_mask(self, seq_len):
+        cached = self._causal_mask_cache.get(seq_len)
+        if cached is not None and cached.device == self.device:
+            return cached
+        mask = torch.triu(
+            torch.ones(seq_len, seq_len, dtype=torch.bool, device=self.device),
+            diagonal=1,
+        )
+        self._causal_mask_cache[seq_len] = mask
+        return mask
+
     def _encode_sequence(self, seq):
         seq = self._to_seq_batch(seq)
         seq_len = seq.shape[1]
@@ -119,7 +132,8 @@ class SAC_Transformer_CQL_v1_6(nn.Module):
             )
         x = self.input_proj(seq)
         x = x + self.pos_embedding[:, :seq_len, :]
-        x = self.temporal_encoder(x)
+        causal_mask = self._get_causal_mask(seq_len)
+        x = self.temporal_encoder(x, mask=causal_mask)
         return x
 
     def _flatten_time(self, x):

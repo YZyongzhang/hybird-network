@@ -1,0 +1,711 @@
+import torch
+import os
+import random
+import torch.nn.functional as F
+
+from configs.default import get_config
+from env import Env
+from utils.log import append_experiment_journal, logger, setup_run_logger
+
+
+def _get_device():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _resolve_onlinerl_setup(online_cfg):
+    model_name = str(getattr(online_cfg, "model", "v1")).lower().strip()
+    foundation_ckpt = str(getattr(online_cfg, "FOUNDATION_CKPT", "")).strip()
+    freeze_backbone = bool(getattr(online_cfg, "freeze_backbone", False))
+    experiment_mode = str(getattr(online_cfg, "experiment", "custom")).lower().strip()
+
+    if experiment_mode in {"v1_freeze", "freeze_foundation", "freezefoundationmodel"}:
+        model_name = "v1"
+        freeze_backbone = True
+        if not foundation_ckpt:
+            raise ValueError(
+                "TRAIN.ONLINE.FOUNDATION_CKPT is required when TRAIN.ONLINE.experiment=v1_freeze."
+            )
+    elif experiment_mode in {"v2_scratch", "scratch", "from_scratch"}:
+        model_name = "v2"
+        foundation_ckpt = ""
+        freeze_backbone = False
+    elif experiment_mode in {"custom", ""}:
+        pass
+    else:
+        raise ValueError(
+            f"Unsupported TRAIN.ONLINE.experiment: {experiment_mode}. "
+            "Use one of [custom, v1_freeze, v2_scratch]."
+        )
+
+    return model_name, foundation_ckpt, freeze_backbone, experiment_mode
+
+
+def _load_hybrid_model(ckpt_path):
+    from network import HybirdNetwork
+
+    device = _get_device()
+    logger.info("loading hybrid model ckpt: %s", ckpt_path)
+    model = HybirdNetwork().to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    model.eval()
+    logger.info("hybrid model loaded on device=%s", device)
+    return model
+
+
+def _run_collect(config, collect_config):
+    from col import COLLECTER
+    from run import Collect
+
+    logger.info("task=COLLECT type=%s", collect_config.TYPE)
+    logger.info("collect config: %s", collect_config)
+    env = Env(config=config)
+    model = _load_hybrid_model(collect_config.COLLECT_CKPT)
+    collecter = COLLECTER(config, env, model=model)
+    logger.info("collect begin")
+    Collect(collecter=collecter)
+    logger.info("collect finished")
+
+
+def _run_pt(pt_config):
+    from train.VADE import LoadLmdb
+
+    logger.info("task=PT type=%s", pt_config.TYPE)
+    logger.info("pt config: %s", pt_config)
+    if pt_config.TYPE == "HybirdNetwork":
+        LoadLmdb.load_pt(pt_config.RAW_DATA_PATH, pt_config)
+        return
+    if pt_config.TYPE == "OfflineWithHybridPT":
+        LoadLmdb.load_offline_with_hybrid(pt_config.RAW_DATA_PATH, config=pt_config)
+        return
+    if pt_config.TYPE == "HybirdNetworkTwoFrame":
+        LoadLmdb.load_two_frame_pt(pt_config.RAW_DATA_PATH, pt_config)
+        return
+
+    # Types below require foundation ckpt.
+    ckpt_required_types = {
+        "OfflineTwoFrameWithHybridPT": "load_offline_two_frame",
+        "offline": "load_offline",
+        "offlinetwoframe": "load_offline_two_frame",
+        "offlinelstm": "load_offline_lstm",
+        "offlinelstm_v15": "load_offline_lstm_v15",
+        "offlinetransformer_v16": "load_offline_lstm_v15",
+        "offlinetransformer": "load_offline_lstm_v15",
+        "offlinelstm_by_level": "load_offline_lstm_level",
+        "offlinelstm_by_level_audio_visual": "load_offline_lstm_level_audio_visual",
+    }
+    if pt_config.TYPE not in ckpt_required_types:
+        raise ValueError(f"Unsupported PT.TYPE: {pt_config.TYPE}")
+
+    model = _load_hybrid_model(pt_config.CKPT)
+    method_name = ckpt_required_types[pt_config.TYPE]
+    method = getattr(LoadLmdb, method_name)
+    logger.info("pt conversion method=%s raw_data=%s to_path=%s", method_name, pt_config.RAW_DATA_PATH, pt_config.TO_PATH)
+    method(pt_config.RAW_DATA_PATH, model=model, config=pt_config)
+    logger.info("pt conversion finished")
+
+
+def _run_eval(config, eval_config):
+    logger.info("task=EVAL type=%s", eval_config.TYPE)
+    logger.info("eval config: %s", eval_config)
+    if eval_config.TYPE == "OfflineRL_v1_3":
+        from tools.eval_hybrid_sac import run_v1_3_eval
+
+        run_v1_3_eval(
+            config=config,
+            hybrid_ckpt=eval_config.HYBRID_CKPT,
+            sac_ckpt=eval_config.SAC_CKPT,
+            episodes=eval_config.EPISODES,
+            max_steps=eval_config.MAX_STEPS,
+            seed=eval_config.SEED,
+            stochastic_sac=eval_config.STOCHASTIC_SAC,
+        )
+        logger.info("eval finished")
+        return
+    if eval_config.TYPE == "OfflineRL_v1_5":
+        from tools.eval_hybrid_sac import run_v1_5_eval
+
+        run_v1_5_eval(
+            config=config,
+            hybrid_ckpt=eval_config.HYBRID_CKPT,
+            sac_ckpt=eval_config.SAC_CKPT,
+            episodes=eval_config.EPISODES,
+            max_steps=eval_config.MAX_STEPS,
+            seed=eval_config.SEED,
+            stochastic_sac=eval_config.STOCHASTIC_SAC,
+            temporal_ckpt=getattr(eval_config, "TEMPORAL_CKPT", ""),
+            actor_ckpt=getattr(eval_config, "ACTOR_CKPT", ""),
+            critic1_ckpt=getattr(eval_config, "CRITIC1_CKPT", ""),
+            critic2_ckpt=getattr(eval_config, "CRITIC2_CKPT", ""),
+        )
+        logger.info("eval finished")
+        return
+    if eval_config.TYPE == "OnlineRL":
+        _run_onlinerl_eval(config, eval_config)
+        logger.info("eval finished")
+        return
+    raise ValueError(f"Unsupported EVAL.TYPE: {eval_config.TYPE}")
+
+
+def _clone_config_with_dataset_split(config, split_name: str):
+    split = str(split_name).strip()
+    if not split:
+        return config
+    cfg = config.clone()
+    cfg.defrost()
+    cfg.TASK_CONFIG.defrost()
+    cfg.TASK_CONFIG.DATASET.SPLIT = split
+    cfg.TASK_CONFIG.freeze()
+    cfg.freeze()
+    return cfg
+
+
+def _obs_to_inputs(obs):
+    rgb = torch.as_tensor(obs["rgb"], dtype=torch.float32) / 255.0
+    depth = torch.as_tensor(obs["depth"], dtype=torch.float32)
+    audio = obs["spectrogram"]
+    if isinstance(audio, (tuple, list)):
+        audio = audio[0]
+    audio = torch.as_tensor(audio, dtype=torch.float32)
+    return audio, rgb, depth
+
+
+def _rotation_to_list(rotation):
+    if rotation is None:
+        return [0.0, 0.0, 0.0, 1.0]
+    if all(hasattr(rotation, k) for k in ("x", "y", "z", "w")):
+        return [float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w)]
+    if all(hasattr(rotation, k) for k in ("w", "x", "y", "z")):
+        return [float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w)]
+    if isinstance(rotation, (tuple, list)):
+        values = [float(v) for v in rotation]
+        if len(values) >= 4:
+            return values[:4]
+    return [0.0, 0.0, 0.0, 1.0]
+
+
+def _get_pose_from_env(env):
+    sim = getattr(getattr(env, "_env", None), "_sim", None)
+    if sim is None or not hasattr(sim, "get_agent_state"):
+        return torch.zeros(7, dtype=torch.float32)
+    try:
+        state = sim.get_agent_state()
+        pos = [float(v) for v in state.position]
+        rot = _rotation_to_list(state.rotation)
+        return torch.as_tensor(pos + rot, dtype=torch.float32)
+    except Exception:
+        return torch.zeros(7, dtype=torch.float32)
+
+
+def _run_onlinerl_eval(config, eval_config):
+    from network import OnlineRLV1, OnlineRLV2
+
+    device = _get_device()
+    model_path = str(getattr(eval_config, "ONLINE_MODEL_PATH", "")).strip()
+    if not model_path:
+        raise ValueError("EVAL.ONLINE_MODEL_PATH is required when EVAL.TYPE=OnlineRL.")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"EVAL.ONLINE_MODEL_PATH not found: {model_path}")
+
+    seed = int(getattr(eval_config, "SEED", 0))
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    env = Env(config)
+    sim = getattr(getattr(env, "_env", None), "_sim", None)
+
+    train_online_cfg = config.TASK_CONFIG.TRAIN.ONLINE
+    model_name, foundation_ckpt, freeze_backbone, experiment_mode = _resolve_onlinerl_setup(
+        train_online_cfg
+    )
+    model_name = str(getattr(eval_config, "ONLINE_MODEL", model_name)).lower().strip()
+    action_dim = int(getattr(train_online_cfg, "action_dim", 4))
+    hidden_dim = int(getattr(train_online_cfg, "hidden_dim", 256))
+    use_pose_encoder = bool(getattr(train_online_cfg, "use_pose_encoder", False))
+    pose_dim = int(getattr(train_online_cfg, "pose_dim", 7))
+    pose_hidden_dim = int(getattr(train_online_cfg, "pose_hidden_dim", 64))
+
+    if model_name == "v1":
+        if not foundation_ckpt:
+            raise ValueError("TRAIN.ONLINE.FOUNDATION_CKPT is required for OnlineRL v1 eval.")
+        agent = OnlineRLV1(
+            action_dim=action_dim,
+            foundation_ckpt=foundation_ckpt,
+            hidden_dim=hidden_dim,
+            use_pose_encoder=use_pose_encoder,
+            pose_dim=pose_dim,
+            pose_hidden_dim=pose_hidden_dim,
+            freeze_backbone=freeze_backbone,
+            device=device,
+        )
+    elif model_name == "v2":
+        agent = OnlineRLV2(
+            action_dim=action_dim,
+            hidden_dim=hidden_dim,
+            foundation_ckpt=foundation_ckpt if foundation_ckpt else None,
+            use_pose_encoder=use_pose_encoder,
+            pose_dim=pose_dim,
+            pose_hidden_dim=pose_hidden_dim,
+            freeze_backbone=freeze_backbone,
+            device=device,
+        )
+    else:
+        raise ValueError(f"Unsupported EVAL.ONLINE_MODEL: {model_name}")
+
+    logger.info("loading onlinerl eval ckpt: %s", model_path)
+    agent.load_state_dict(torch.load(model_path, map_location=device))
+    agent.to(device)
+    agent.eval()
+
+    max_steps = int(getattr(eval_config, "MAX_STEPS", 200))
+    greedy = bool(getattr(eval_config, "ONLINE_GREEDY", True))
+    log_every = int(getattr(eval_config, "ONLINE_LOG_EVERY", 1))
+    episodes = int(getattr(eval_config, "EPISODES", 0))
+    if episodes <= 0:
+        episodes = int(getattr(getattr(env, "_env", None), "number_of_episodes", 0))
+    episodes = max(1, episodes)
+
+    total_reward = 0.0
+    total_spl = 0.0
+    total_distance = 0.0
+    logger.info(
+        "onlinerl eval begin: model=%s experiment=%s split=%s episodes=%s max_steps=%s greedy=%s seed=%s",
+        model_name,
+        experiment_mode,
+        config.TASK_CONFIG.DATASET.SPLIT,
+        episodes,
+        max_steps,
+        greedy,
+        seed,
+    )
+
+    for ep_idx in range(episodes):
+        obs = env.reset()
+        info = {"spl": 0.0, "distance_to_goal": -1.0}
+        pre_rgb = None
+        pre_depth = None
+        episode_reward = 0.0
+        done = False
+        steps_taken = 0
+
+        for _step in range(max_steps):
+            audio, rgb, depth = _obs_to_inputs(obs)
+            pose = _get_pose_from_env(env)
+            if pre_rgb is None:
+                pre_rgb = torch.zeros_like(rgb)
+            if pre_depth is None:
+                pre_depth = torch.zeros_like(depth)
+            trgb = torch.cat([pre_rgb, rgb], dim=2)
+            tdepth = torch.cat([pre_depth, depth], dim=2)
+
+            with torch.no_grad():
+                emb = agent.encode(
+                    audio.unsqueeze(0).to(device),
+                    trgb.unsqueeze(0).to(device),
+                    tdepth.unsqueeze(0).to(device),
+                    pose.unsqueeze(0).to(device),
+                ).float()
+                logits = agent.policy_head(emb)
+                probs = F.softmax(logits, dim=-1)
+                if greedy:
+                    action = int(torch.argmax(probs, dim=-1).item())
+                else:
+                    action = int(torch.distributions.Categorical(probs).sample().item())
+
+            obs, reward, done, info = env.step(action=action)
+            is_collided = False
+            if sim is not None and hasattr(sim, "previous_step_collided"):
+                try:
+                    is_collided = bool(sim.previous_step_collided)
+                except Exception:
+                    is_collided = False
+            logger.info(
+                "take action sac model %s ,reward %s , step %s , done %s , is collided %s",
+                action,
+                float(reward),
+                _step,
+                bool(done),
+                is_collided,
+            )
+            episode_reward += float(reward)
+            steps_taken = _step + 1
+            pre_rgb = rgb
+            pre_depth = depth
+            if done:
+                break
+
+        total_reward += episode_reward
+        total_spl += float(info.get("spl", 0.0))
+        total_distance += float(info.get("distance_to_goal", -1.0))
+        if log_every > 0 and ((ep_idx + 1) % log_every == 0):
+            logger.info(
+                "onlinerl eval episode=%s/%s reward=%.4f spl=%.4f distance=%.4f steps=%s done=%s",
+                ep_idx + 1,
+                episodes,
+                episode_reward,
+                float(info.get("spl", 0.0)),
+                float(info.get("distance_to_goal", -1.0)),
+                steps_taken,
+                bool(done),
+            )
+
+    avg_reward = total_reward / float(episodes)
+    avg_spl = total_spl / float(episodes)
+    avg_distance = total_distance / float(episodes)
+    logger.info(
+        "onlinerl eval result: reward=%.4f spl=%.4f distance=%.4f",
+        avg_reward,
+        avg_spl,
+        avg_distance,
+    )
+
+
+def _build_offline_agent(config, offline_config):
+    from train import OnlineTest
+
+    env = Env(config)
+    hybrid_model = _load_hybrid_model(offline_config.ONLINE_CKPT)
+    online_test = OnlineTest(env=env, hybirdmodel=hybrid_model, config=offline_config)
+
+    state_dim = offline_config.state_dim
+    action_dim = offline_config.action_dim
+    hidden_dim = offline_config.hidden_dim
+    lr = offline_config.lr
+    tau = offline_config.tau
+    gamma = offline_config.gamma
+    beta = offline_config.beta
+    target_entropy = offline_config.target_entropy
+    device = _get_device()
+
+    if offline_config.model == "v1":
+        from network import SAC_model
+        from train import OfflineTrain, OfflineTrainBuffer
+
+        sac_model = SAC_model(
+            state_dim=state_dim,
+            hidden_dim=hidden_dim,
+            action_dim=action_dim,
+            actor_lr=lr,
+            critic_lr=lr,
+            alpha_lr=lr,
+            target_entropy=target_entropy,
+            tau=tau,
+            gamma=gamma,
+            beta=beta,
+            device=device,
+        )
+        trainer = OfflineTrainBuffer if offline_config.buffer else OfflineTrain
+    elif offline_config.model == "v1_3":
+        from network import SAC_Hybird_model
+        from train import OfflineAndHybird
+
+        sac_model = SAC_Hybird_model(
+            state_dim=state_dim,
+            hidden_dim=hidden_dim,
+            action_dim=action_dim,
+            actor_lr=lr,
+            critic_lr=lr,
+            alpha_lr=lr,
+            target_entropy=target_entropy,
+            tau=tau,
+            gamma=gamma,
+            beta=beta,
+            device=device,
+            hybird_ckpt_path=offline_config.ONLINE_CKPT,
+        )
+        trainer = OfflineAndHybird
+    elif offline_config.model == "v1_4":
+        from network import SAC_Hybird_LSTM_CQL_model
+        from train import OfflineAndHybird
+
+        lstm_hidden_dim = int(getattr(offline_config, "lstm_hidden_dim", state_dim))
+        lstm_num_layers = int(getattr(offline_config, "lstm_num_layers", 1))
+        sac_model = SAC_Hybird_LSTM_CQL_model(
+            state_dim=state_dim,
+            hidden_dim=hidden_dim,
+            action_dim=action_dim,
+            actor_lr=lr,
+            critic_lr=lr,
+            alpha_lr=lr,
+            target_entropy=target_entropy,
+            tau=tau,
+            gamma=gamma,
+            beta=beta,
+            device=device,
+            hybird_ckpt_path=offline_config.ONLINE_CKPT,
+            lstm_hidden_dim=lstm_hidden_dim,
+            lstm_num_layers=lstm_num_layers,
+        )
+        trainer = OfflineAndHybird
+    elif offline_config.model == "v1_5":
+        from network import SAC_LSTM_CQL_v1_5
+        from train import OfflineTrain
+
+        lstm_hidden_dim = int(getattr(offline_config, "lstm_hidden_dim", state_dim))
+        lstm_num_layers = int(getattr(offline_config, "lstm_num_layers", 1))
+        sac_model = SAC_LSTM_CQL_v1_5(
+            state_dim=state_dim,
+            hidden_dim=hidden_dim,
+            action_dim=action_dim,
+            actor_lr=lr,
+            critic_lr=lr,
+            alpha_lr=lr,
+            target_entropy=target_entropy,
+            tau=tau,
+            gamma=gamma,
+            beta=beta,
+            device=device,
+            lstm_hidden_dim=lstm_hidden_dim,
+            lstm_num_layers=lstm_num_layers,
+        )
+        trainer = OfflineTrain
+    elif offline_config.model == "v1_6":
+        from network import SAC_Transformer_CQL_v1_6
+        from train import OfflineTrain
+
+        transformer_dim = int(getattr(offline_config, "transformer_dim", state_dim))
+        transformer_heads = int(getattr(offline_config, "transformer_heads", 4))
+        transformer_layers = int(getattr(offline_config, "transformer_layers", 2))
+        transformer_ffn_dim = int(
+            getattr(offline_config, "transformer_ffn_dim", transformer_dim * 2)
+        )
+        max_seq_len = int(getattr(offline_config, "max_seq_len", 16))
+        sac_model = SAC_Transformer_CQL_v1_6(
+            state_dim=state_dim,
+            hidden_dim=hidden_dim,
+            action_dim=action_dim,
+            actor_lr=lr,
+            critic_lr=lr,
+            alpha_lr=lr,
+            target_entropy=target_entropy,
+            tau=tau,
+            gamma=gamma,
+            beta=beta,
+            device=device,
+            transformer_dim=transformer_dim,
+            transformer_heads=transformer_heads,
+            transformer_layers=transformer_layers,
+            transformer_ffn_dim=transformer_ffn_dim,
+            max_seq_len=max_seq_len,
+        )
+        trainer = OfflineTrain
+    elif offline_config.model == "v2":
+        from network import CQLSAC
+        from train import OfflineTrain, OfflineTrainBuffer
+
+        sac_model = CQLSAC(
+            state_size=state_dim,
+            action_size=action_dim,
+            hidden_size=hidden_dim,
+            beta=beta,
+            device=device,
+        )
+        trainer = OfflineTrainBuffer if offline_config.buffer else OfflineTrain
+    elif offline_config.model == "v4":
+        from network import cql_lstm
+        from train import OfflineTrain
+
+        sac_model = cql_lstm(
+            state_size=state_dim,
+            action_size=action_dim,
+            tau=tau,
+            hidden_size=hidden_dim,
+            learning_rate=lr,
+            with_lagrange=False,
+            target_action_gap=0,
+            device=device,
+            lstm_seq_len=5,
+            lstm_layer=1,
+            lstm_out=128,
+        )
+        trainer = OfflineTrain
+    elif offline_config.model == "v5":
+        from network import cql_lstm_attention
+        from train import OfflineTrain
+
+        sac_model = cql_lstm_attention(
+            state_size=state_dim,
+            action_size=action_dim,
+            tau=tau,
+            hidden_size=hidden_dim,
+            learning_rate=lr,
+            with_lagrange=False,
+            target_action_gap=0,
+            device=device,
+            lstm_seq_len=5,
+            lstm_layer=1,
+            lstm_out=128,
+        )
+        trainer = OfflineTrain
+    else:
+        raise ValueError(f"Unsupported OFFLINE.model: {offline_config.model}")
+
+    if offline_config.LOAD_PATH:
+        logger.info("loading offline agent ckpt: %s", offline_config.MODEL_PATH)
+        sac_model.load_state_dict(torch.load(offline_config.MODEL_PATH, map_location=device))
+        sac_model.train()
+
+    logger.info("offline agent built: model=%s trainer=%s", offline_config.model, trainer.__name__)
+    return sac_model, trainer, online_test
+
+
+def _build_onlinerl_agent(config, online_config):
+    from train import OnlineRLTrain
+
+    device = _get_device()
+    env = Env(config)
+    model_name, foundation_ckpt, freeze_backbone, experiment_mode = _resolve_onlinerl_setup(
+        online_config
+    )
+
+    if model_name == "v1":
+        from network import OnlineRLV1
+
+        if not foundation_ckpt:
+            raise ValueError("TRAIN.ONLINE.FOUNDATION_CKPT is required for OnlineRL v1.")
+        agent = OnlineRLV1(
+            action_dim=int(online_config.action_dim),
+            foundation_ckpt=foundation_ckpt,
+            hidden_dim=int(getattr(online_config, "hidden_dim", 256)),
+            use_pose_encoder=bool(getattr(online_config, "use_pose_encoder", False)),
+            pose_dim=int(getattr(online_config, "pose_dim", 7)),
+            pose_hidden_dim=int(getattr(online_config, "pose_hidden_dim", 64)),
+            freeze_backbone=freeze_backbone,
+            device=device,
+        )
+    elif model_name == "v2":
+        from network import OnlineRLV2
+
+        agent = OnlineRLV2(
+            action_dim=int(online_config.action_dim),
+            hidden_dim=int(getattr(online_config, "hidden_dim", 256)),
+            foundation_ckpt=foundation_ckpt if foundation_ckpt else None,
+            use_pose_encoder=bool(getattr(online_config, "use_pose_encoder", False)),
+            pose_dim=int(getattr(online_config, "pose_dim", 7)),
+            pose_hidden_dim=int(getattr(online_config, "pose_hidden_dim", 64)),
+            freeze_backbone=freeze_backbone,
+            device=device,
+        )
+    else:
+        raise ValueError(f"Unsupported ONLINE.model: {online_config.model}")
+
+    if bool(getattr(online_config, "LOAD_PATH", False)):
+        model_path = str(getattr(online_config, "MODEL_PATH", "")).strip()
+        if not model_path:
+            raise ValueError("TRAIN.ONLINE.MODEL_PATH must be set when LOAD_PATH=True.")
+        logger.info("loading onlinerl agent ckpt: %s", model_path)
+        agent.load_state_dict(torch.load(model_path, map_location=device))
+        agent.train()
+
+    logger.info(
+        "onlinerl agent built: model=%s experiment=%s freeze_backbone=%s trainer=%s",
+        model_name,
+        experiment_mode,
+        freeze_backbone,
+        OnlineRLTrain.__name__,
+    )
+    return agent, OnlineRLTrain, env
+
+
+def _run_train(config, train_config):
+    from run import Train
+
+    logger.info("task=TRAIN type=%s", train_config.TYPE)
+    logger.info("train config: %s", train_config)
+    if train_config.TYPE == "HybirdNetworkAudio":
+        from network import AudioCRNN
+        from train import HybirdNetworkAudioTrain
+
+        model = AudioCRNN()
+        Train(model=model, trainer=HybirdNetworkAudioTrain, config=train_config)
+        logger.info("train finished: HybirdNetworkAudio")
+        return
+
+    if train_config.TYPE == "HybirdNetwork":
+        from network import HybirdNetwork
+        from train import HybirdNetworkTrain
+
+        model = HybirdNetwork()
+        Train(model=model, trainer=HybirdNetworkTrain, config=train_config)
+        logger.info("train finished: HybirdNetwork")
+        return
+
+    if train_config.TYPE == "OfflineRL":
+        offline_config = train_config.OFFLINE
+        sac_model, trainer, online_test = _build_offline_agent(config, offline_config)
+        Train(
+            model=sac_model,
+            trainer=trainer,
+            config=offline_config,
+            online_test=online_test,
+        )
+        logger.info("train finished: OfflineRL")
+        return
+
+    if train_config.TYPE == "OnlineRL":
+        online_config = train_config.ONLINE
+        agent, trainer, env = _build_onlinerl_agent(config, online_config)
+        Train(
+            model=agent,
+            trainer=trainer,
+            config=online_config,
+            env=env,
+        )
+        logger.info("train finished: OnlineRL")
+        return
+
+    raise ValueError(f"Unsupported TRAIN.TYPE: {train_config.TYPE}")
+
+
+def main():
+    task_config = config.TASK_CONFIG
+    logger.info("run begin")
+    logger.info(
+        "task flags: collect=%s pt=%s eval=%s train=%s",
+        task_config.COLLECT.OPEN,
+        task_config.PT.OPEN,
+        task_config.EVAL.OPEN,
+        task_config.TRAIN.OPEN,
+    )
+    if task_config.COLLECT.OPEN:
+        _run_collect(config, task_config.COLLECT)
+    elif task_config.PT.OPEN:
+        _run_pt(task_config.PT)
+    elif task_config.EVAL.OPEN:
+        _run_eval(config, task_config.EVAL)
+    elif task_config.TRAIN.OPEN:
+        _run_train(config, task_config.TRAIN)
+    else:
+        raise ValueError("No task is enabled. Please set one OPEN field to True.")
+    logger.info("run finished")
+
+
+config = get_config()
+
+if __name__ == "__main__":
+    run_name = "run"
+    task_cfg = config.TASK_CONFIG
+    if task_cfg.COLLECT.OPEN:
+        run_name = f"collect_{task_cfg.COLLECT.TYPE}"
+    elif task_cfg.PT.OPEN:
+        run_name = f"pt_{task_cfg.PT.TYPE}"
+    elif task_cfg.EVAL.OPEN:
+        run_name = f"eval_{task_cfg.EVAL.TYPE}"
+    elif task_cfg.TRAIN.OPEN:
+        run_name = f"train_{task_cfg.TRAIN.TYPE}"
+
+    log_path = setup_run_logger(base_dir="logs", run_name=run_name)
+    logger.info("python run.py started, log_path=%s", log_path)
+    exp_note = os.environ.get("EXP_NOTE", "").strip()
+    journal_path = append_experiment_journal(
+        run_name=run_name,
+        note=exp_note,
+        journal_path="logs/experiment_journal.md",
+    )
+    logger.info("experiment journal appended: %s", journal_path)
+    try:
+        main()
+    except Exception:
+        logger.exception("run failed with exception")
+        raise

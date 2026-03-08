@@ -3,6 +3,7 @@ from train import (
     ShardedPTDatasetOffline,
     RandomReloadShardedPTDatasetOffline,
     ShardedPTDatasetOfflineBuffer,
+    RandomReloadShardedPTDatasetFoundation,
 )
 import torch
 import torch.optim as optim
@@ -147,12 +148,45 @@ def Train(model ,trainer , config , device = None , **kwargs):
         print(f"[Train] checkpoint dir: {save_dir}")
         print(f"[Train] tensorboard loss dir: {loss_dir}")
         
-        train_dataset = ShardedPTDataset(shard_pattern=config.train_shard_pattern)
+        num_workers = int(getattr(config, "NUM_WORKERS", 0))
+        persistent_workers = bool(getattr(config, "PERSISTENT_WORKERS", True))
+        prefetch_factor = int(getattr(config, "PREFETCH_FACTOR", 2))
+        random_shard_reload = bool(getattr(config, "RANDOM_SHARD_RELOAD", False))
+        random_shards_per_epoch = int(getattr(config, "RANDOM_SHARDS_PER_EPOCH", 8))
+        reload_shards_every_epochs = int(getattr(config, "RELOAD_SHARDS_EVERY_EPOCHS", 10))
+        random_shard_seed = getattr(config, "RANDOM_SHARD_SEED", None)
+
+        if random_shard_reload:
+            train_dataset = RandomReloadShardedPTDatasetFoundation(
+                shard_pattern=config.train_shard_pattern,
+                shards_per_epoch=random_shards_per_epoch,
+                reload_every_epochs=reload_shards_every_epochs,
+                seed=random_shard_seed,
+            )
+        else:
+            train_dataset = ShardedPTDataset(shard_pattern=config.train_shard_pattern)
         val_dataset = ShardedPTDataset(shard_pattern=config.val_shard_pattern)
         print(train_dataset.__len__())
         print(val_dataset.__len__())
-        train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True ,  pin_memory=True)
-        val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=True , pin_memory=True)
+        loader_kwargs = {
+            "num_workers": num_workers,
+            "pin_memory": torch.cuda.is_available(),
+            "persistent_workers": (persistent_workers and num_workers > 0),
+        }
+        if num_workers > 0:
+            loader_kwargs["prefetch_factor"] = prefetch_factor
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=config.BATCH_SIZE,
+            shuffle=True,
+            **loader_kwargs,
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=config.BATCH_SIZE,
+            shuffle=True,
+            **loader_kwargs,
+        )
         if config.SAVE_LOADER:
             with open('val_loader.pkl' , 'wb') as f:
                 pickle.dump(val_loader , f)
