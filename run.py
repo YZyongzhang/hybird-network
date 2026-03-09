@@ -372,10 +372,13 @@ def _build_offline_agent(config, offline_config):
     action_dim = offline_config.action_dim
     hidden_dim = offline_config.hidden_dim
     lr = offline_config.lr
+    alpha_lr = float(getattr(offline_config, "alpha_lr", lr))
     tau = offline_config.tau
     gamma = offline_config.gamma
     beta = offline_config.beta
     target_entropy = offline_config.target_entropy
+    log_alpha_min = float(getattr(offline_config, "log_alpha_min", -10.0))
+    log_alpha_max = float(getattr(offline_config, "log_alpha_max", 2.0))
     device = _get_device()
 
     if offline_config.model == "v1":
@@ -388,11 +391,13 @@ def _build_offline_agent(config, offline_config):
             action_dim=action_dim,
             actor_lr=lr,
             critic_lr=lr,
-            alpha_lr=lr,
+            alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
             gamma=gamma,
             beta=beta,
+            log_alpha_min=log_alpha_min,
+            log_alpha_max=log_alpha_max,
             device=device,
         )
         trainer = OfflineTrainBuffer if offline_config.buffer else OfflineTrain
@@ -406,7 +411,7 @@ def _build_offline_agent(config, offline_config):
             action_dim=action_dim,
             actor_lr=lr,
             critic_lr=lr,
-            alpha_lr=lr,
+            alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
             gamma=gamma,
@@ -427,7 +432,7 @@ def _build_offline_agent(config, offline_config):
             action_dim=action_dim,
             actor_lr=lr,
             critic_lr=lr,
-            alpha_lr=lr,
+            alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
             gamma=gamma,
@@ -450,7 +455,7 @@ def _build_offline_agent(config, offline_config):
             action_dim=action_dim,
             actor_lr=lr,
             critic_lr=lr,
-            alpha_lr=lr,
+            alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
             gamma=gamma,
@@ -477,7 +482,7 @@ def _build_offline_agent(config, offline_config):
             action_dim=action_dim,
             actor_lr=lr,
             critic_lr=lr,
-            alpha_lr=lr,
+            alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
             gamma=gamma,

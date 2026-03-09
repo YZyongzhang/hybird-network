@@ -58,13 +58,17 @@ COLLECT:
   COLLECT_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
 PT:
-  OPEN: True
-  TYPE: "offlinetransformer_v16" # offlinelstm_v15 | offlinetransformer_v16
-  RAW_DATA_PATH: "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-  TO_PATH: "media/pt/offline_LSTM_muti_embedding_reward_scaled"
-  CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
+  OPEN: False
+  TYPE: "OfflineTwoFrameWithHybridPT" # offlinelstm_v15 | offlinetransformer_v16
+  RAW_DATA_PATH: 
+    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
+  TO_PATH: "media/pt/mass_offline_data"
+  CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   SHARD_SIZE: 10000
-  SEQ_LEN: 5
+  # SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
   # Reward shaping for PT production
   REWARD_SCALE_ENABLE: True
@@ -79,7 +83,7 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   TYPE: "DORL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL | DORL
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
@@ -92,7 +96,7 @@ TRAIN:
 
   OFFLINE:
     TYPE: "OfflineRL"
-    model: "v1_6"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
+    model: "v1"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
     buffer: False
     SAVE_LOADER: False
 
@@ -101,12 +105,11 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/offline_LSTM_muti_embedding_reward_scaled"
-      - "media/pt/offline_LSTM_muti_embedding_collided_reward_scaled"
-    ONLINE_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
+      - "media/pt/mass_offline_data"
+    ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
     RANDOM_SHARD_RELOAD: True
-    RANDOM_SHARDS_PER_EPOCH: 28
+    RANDOM_SHARDS_PER_EPOCH: 55
     RELOAD_SHARDS_EVERY_EPOCHS: 10
     RANDOM_SHARD_SEED: 0
     PREFETCH_FACTOR: 2
@@ -123,7 +126,10 @@ TRAIN:
     action_dim: 4
     hidden_dim: 128
     lr: 0.0002
-    target_entropy: 0.8
+    alpha_lr: 0.0001
+    target_entropy: 1.08
+    log_alpha_min: -10.0
+    log_alpha_max: 2.0
     tau: 0.005
     beta: 0.5
     gamma: 0.99
@@ -244,8 +250,8 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_multiple"
+  SPLIT: "val_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_sample_50.json.gz"

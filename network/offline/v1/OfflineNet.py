@@ -47,7 +47,8 @@ class QValueNet(torch.nn.Module):
 class SAC_model(torch.nn.Module):
     ''' 处理离散动作的SAC算法 '''
     def __init__(self, state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
-                 alpha_lr, target_entropy, tau, gamma, beta ,device):
+                 alpha_lr, target_entropy, tau, gamma, beta ,device,
+                 log_alpha_min=-10.0, log_alpha_max=2.0):
         super(SAC_model, self).__init__()
         # 策略网络
         self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
@@ -81,6 +82,11 @@ class SAC_model(torch.nn.Module):
         self.device = device
         self.beta = beta  # CQL的超参数
         self.clip_grad_param = 1
+        self.log_alpha_min = float(log_alpha_min)
+        self.log_alpha_max = float(log_alpha_max)
+
+    def _alpha(self):
+        return self.log_alpha.clamp(self.log_alpha_min, self.log_alpha_max).exp()
 
     def get_action(self, state):
         # state = torch.tensor([state], dtype=torch.float).to(self.device)
@@ -102,7 +108,7 @@ class SAC_model(torch.nn.Module):
             min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
                                    dim=1,
                                    keepdim=True)
-            next_value = min_qvalue + self.log_alpha.exp() * entropy
+            next_value = min_qvalue + self._alpha() * entropy
             td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
@@ -132,19 +138,24 @@ class SAC_model(torch.nn.Module):
         min_qvalue = torch.sum(probs * torch.min(q1_value, q2_value),
                                dim=1,
                                keepdim=True)  # 直接根据概率计算期望
-        actor_loss = torch.mean(-self.log_alpha.exp() * entropy - min_qvalue)
+        # actor update should not backprop through temperature parameter.
+        alpha = self._alpha()
+        actor_loss = torch.mean(-alpha.detach() * entropy - min_qvalue)
         # actor_loss = (probs * (self.log_alpha.exp().to(self.device) * log_probs - min_qvalue )).sum(1).mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
         # 更新alpha值
+        alpha_for_loss = self._alpha()
         alpha_loss = torch.mean(
-            (entropy - self.target_entropy).detach() * self.log_alpha.exp())
+            (entropy - self.target_entropy).detach() * alpha_for_loss)
         # alpha_loss = - (self.log_alpha.exp() * (log_probs.cpu() + self.target_entropy).detach().cpu()).mean()
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
+        with torch.no_grad():
+            self.log_alpha.clamp_(self.log_alpha_min, self.log_alpha_max)
 
 
         # 更新两个Q网络
@@ -163,8 +174,8 @@ class SAC_model(torch.nn.Module):
         critic_2_loss = torch.mean(
             F.mse_loss(critic_2_q_values_, td_target.detach()))
 
-        cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values.mean()
-        cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values.mean()
+        cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values_.mean()
+        cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values_.mean()
 
         # cql1_scaled_loss = torch.logsumexp(critic_1_q_values, dim=1).mean() - critic_1_q_values_.mean()
         # cql2_scaled_loss = torch.logsumexp(critic_2_q_values, dim=1).mean() - critic_2_q_values_.mean()
@@ -195,5 +206,5 @@ class SAC_model(torch.nn.Module):
             'cql_1_loss': cql_1_loss.item(),
             'cql_2_loss': cql_2_loss.item(),
             'entropy': entropy.mean().item(),
-            'alpha': self.log_alpha.exp().item()
+            'alpha': self._alpha().item()
         }

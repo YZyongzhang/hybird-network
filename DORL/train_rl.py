@@ -221,7 +221,7 @@ class DORLSACTrainer:
         for p_src, p_dst in zip(src.parameters(), dst.parameters()):
             p_dst.data.copy_(p_dst.data * (1.0 - self.cfg.tau) + p_src.data * self.cfg.tau)
 
-    def _update(self, global_step: int) -> Optional[Dict[str, float]]:
+    def _update(self, global_step:int) -> Optional[Dict[str , float]]: # old online trainer which codex write alse
         if len(self.replay) < max(self.cfg.batch_size, self.cfg.warmup_steps):
             return None
 
@@ -231,6 +231,7 @@ class DORLSACTrainer:
         rewards = rewards.to(self.device).unsqueeze(1)
         next_states = next_states.to(self.device)
         dones = dones.to(self.device).unsqueeze(1)
+
 
         with torch.no_grad():
             next_probs, next_log_probs = self._policy(next_states)
@@ -242,11 +243,18 @@ class DORLSACTrainer:
             q_target = rewards + self.cfg.gamma * (1.0 - dones) * next_v
             q_target = q_target.clamp(self.cfg.q_target_min, self.cfg.q_target_max)
 
-        q1_pred = self.q1(states).gather(1, actions)
-        q2_pred = self.q2(states).gather(1, actions)
+        # Critic updates should not backprop through the shared encoder graph twice.
+        # Use a detached embedding for Q updates; actor update below uses `emb`.
+        emb_critic = states.detach()
+        q1_pred_all = self.q1(emb_critic)
+        q2_pred_all = self.q2(emb_critic)
+        q1_pred = q1_pred_all.gather(1, actions)
+        q2_pred = q2_pred_all.gather(1, actions)
+
         q1_loss = F.mse_loss(q1_pred, q_target)
         q2_loss = F.mse_loss(q2_pred, q_target)
 
+        
         self.q1_opt.zero_grad()
         q1_loss.backward()
         nn.utils.clip_grad_norm_(self.q1.parameters(), self.cfg.max_grad_norm)
@@ -271,20 +279,21 @@ class DORLSACTrainer:
 
         entropy = -torch.sum(probs * log_probs, dim=1).mean()
         alpha_loss = (alpha * (entropy.detach() - self.target_entropy)).mean()
-        
         self.alpha_opt.zero_grad()
         alpha_loss.backward()
         self.alpha_opt.step()
+        with torch.no_grad():
+            self.log_alpha.clamp_(self.cfg.log_alpha_min, self.cfg.log_alpha_max)
 
         self._soft_update(self.q1, self.target_q1)
         self._soft_update(self.q2, self.target_q2)
         if self.writer:
-            self.writer.add_scalar("dorl/sac_q1_loss", float(q1_loss.item()), global_step)
-            self.writer.add_scalar("dorl/sac_q2_loss", float(q2_loss.item()), global_step)
-            self.writer.add_scalar("dorl/sac_actor_loss", float(actor_loss.item()), global_step)
-            self.writer.add_scalar("dorl/sac_alpha_loss", float(alpha_loss.item()), global_step)
-            self.writer.add_scalar("dorl/sac_alpha", float(self._alpha().item()), global_step)
-            self.writer.add_scalar("dorl/sac_entropy", float(entropy.item()), global_step)
+            self.writer.add_scalar("online/sac_q1_loss", float(q1_loss.item()), global_step)
+            self.writer.add_scalar("online/sac_q2_loss", float(q2_loss.item()), global_step)
+            self.writer.add_scalar("online/sac_actor_loss", float(actor_loss.item()), global_step)
+            self.writer.add_scalar("online/sac_alpha_loss", float(alpha_loss.item()), global_step)
+            self.writer.add_scalar("online/sac_alpha", float(self._alpha().item()), global_step)
+            self.writer.add_scalar("online/sac_entropy", float(entropy.item()), global_step)
 
         return {
             "q1_loss": float(q1_loss.item()),
@@ -293,7 +302,6 @@ class DORLSACTrainer:
             "alpha": float(self._alpha().item()),
             "entropy": float(entropy.item()),
         }
-
     def _episode_spl(self, done: bool, info: Dict[str, Any]) -> float:
         """
         DORL 定义:
@@ -354,11 +362,12 @@ class DORLSACTrainer:
                 ep_last_info: Dict[str, Any] = {}
 
                 for _step in range(self.cfg.max_steps):
+                    # 测试通过 ， 满足预想按照数据集进行step
                     action = self._sample_action(state, greedy_prob=greedy_prob)
-                    next_state_raw, reward, done, info = self.env.step(action=action)
+                    next_state_raw, reward, done, info = self.env.step(action=action) # 满足走错路子返回done true。reward -1 。 nextstateraw 
                     next_state = self._state_to_tensor(next_state_raw)
                     matched = bool(info.get("matched", False))
-
+                    # 测试通过
                     self.replay.push(
                         state=state,
                         action=int(action),
