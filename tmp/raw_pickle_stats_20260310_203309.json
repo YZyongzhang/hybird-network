@@ -1,0 +1,114 @@
+{
+  "input": {
+    "pickle_list": null,
+    "paths_arg": "[\"dataset-data3/dataset/pickle/offline(1.5_muti)/level3\",\"dataset-data3/dataset/pickle/offline(2.0_muti)/level3\",\"dataset-data3/dataset/pickle/offline(muti_collided)\",\"dataset-data3/dataset/pickle/hybird(heard_train_multiple)\"]",
+    "num_input_paths": 4,
+    "num_discovered_files": 18669,
+    "max_files": 0,
+    "thresholds": {
+      "stop_action_id": 0,
+      "success_distance_threshold": 0.0,
+      "success_reward_threshold": 0.0,
+      "collision_reward_threshold": -4.0
+    }
+  },
+  "summary": {
+    "total_episodes": 18669,
+    "total_steps": 555260,
+    "success_episode_count": 17553,
+    "success_episode_ratio": 0.9402217579945364,
+    "collision_episode_count": 1472,
+    "collision_episode_ratio": 0.07884728694627458,
+    "early_stop_episode_count": 538,
+    "early_stop_episode_ratio": 0.02881782634313568,
+    "collision_step_count": 20192,
+    "collision_step_ratio": 0.03636494615135252
+  },
+  "reward_range": {
+    "min": -1.01,
+    "max": 9.99,
+    "mean": 0.6939206858048476,
+    "p01": -1.01,
+    "p50": 0.99,
+    "p95": 0.99,
+    "p99": 9.99
+  },
+  "early_stop_range": {
+    "terminal_reward": {
+      "min": -0.01,
+      "max": -0.01,
+      "mean": -0.009999999999999998
+    },
+    "terminal_distance_to_goal": {
+      "min": 1.0,
+      "max": 47.0,
+      "mean": 3.617100371747212
+    }
+  },
+  "initial_distance_distribution": {
+    "count": 18669,
+    "summary": {
+      "min": 3.0,
+      "max": 81.0,
+      "mean": 11.684664416947882,
+      "p50": 9.0,
+      "p95": 29.0
+    },
+    "histogram": {
+      "edges": [
+        3.0,
+        6.9,
+        10.8,
+        14.7,
+        18.6,
+        22.5,
+        26.4,
+        30.3,
+        34.2,
+        38.1,
+        42.0,
+        45.9,
+        49.8,
+        53.699999999999996,
+        57.6,
+        61.5,
+        65.4,
+        69.3,
+        73.2,
+        77.1,
+        81.0
+      ],
+      "counts": [
+        5877,
+        5140,
+        2837,
+        1764,
+        1073,
+        706,
+        456,
+        326,
+        213,
+        98,
+        74,
+        37,
+        26,
+        17,
+        12,
+        10,
+        2,
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "skipped_files": [],
+  "figures": {
+    "episode_ratios_bar": "tmp/raw_pickle_figs_20260310_203309/episode_ratios_bar.png",
+    "collision_step_ratio_pie": "tmp/raw_pickle_figs_20260310_203309/collision_step_ratio_pie.png",
+    "reward_hist": "tmp/raw_pickle_figs_20260310_203309/reward_hist.png",
+    "initial_distance_hist": "tmp/raw_pickle_figs_20260310_203309/initial_distance_hist.png",
+    "early_stop_terminal_distance_box": "tmp/raw_pickle_figs_20260310_203309/early_stop_terminal_distance_box.png",
+    "analysis_overview": "tmp/raw_pickle_figs_20260310_203309/analysis_overview.png"
+  }
+}

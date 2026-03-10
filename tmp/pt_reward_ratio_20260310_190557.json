@@ -1,0 +1,44 @@
+{
+  "root": "media/pt/mass_offline_data",
+  "num_shards": 56,
+  "total_steps": 555260,
+  "round_decimals": 2,
+  "top_k": 6,
+  "reward_ratio_distribution": [
+    {
+      "reward": "0.99",
+      "count": 273675,
+      "ratio": 0.49287721067607965
+    },
+    {
+      "reward": "-0.01",
+      "count": 164818,
+      "ratio": 0.2968303137269027
+    },
+    {
+      "reward": "-1.01",
+      "count": 58346,
+      "ratio": 0.10507870186939451
+    },
+    {
+      "reward": "-0.51",
+      "count": 20192,
+      "ratio": 0.03636494615135252
+    },
+    {
+      "reward": "0.39",
+      "count": 20138,
+      "ratio": 0.03626769441342794
+    },
+    {
+      "reward": "9.99",
+      "count": 17553,
+      "ratio": 0.0316122176998163
+    },
+    {
+      "reward": "other",
+      "count": 538,
+      "ratio": 0.00096891546302633
+    }
+  ]
+}

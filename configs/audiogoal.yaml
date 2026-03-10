@@ -58,20 +58,20 @@ COLLECT:
   COLLECT_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
 PT:
-  OPEN: False
+  OPEN: True
   TYPE: "OfflineTwoFrameWithHybridPT" # offlinelstm_v15 | offlinetransformer_v16
   RAW_DATA_PATH: 
     - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-  TO_PATH: "media/pt/mass_offline_data"
+  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale"
   CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   SHARD_SIZE: 10000
   # SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
   # Reward shaping for PT production
-  REWARD_SCALE_ENABLE: True
+  REWARD_SCALE_ENABLE: False
   REWARD_GLOBAL_SCALE: 1.0
   REWARD_COLLISION_PENALTY: -0.5
   REWARD_ESCAPE_COLLISION_BONUS: 0.4
@@ -83,8 +83,13 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: True
-  TYPE: "DORL"  # HybirdNetwork | HybirdNetworkAudio | OfflineRL | OnlineRL | DORL
+  OPEN: False
+  # 一级分支（TRAIN.TYPE）:
+  # - HybirdNetwork / HybirdNetworkAudio
+  # - OfflineRL -> 使用 TRAIN.OFFLINE
+  # - OnlineRL  -> 使用 TRAIN.ONLINE
+  # - DORL      -> 使用 TRAIN.DORL
+  TYPE: "OfflineRL"
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
@@ -118,14 +123,16 @@ TRAIN:
 
     replay_epoch: 1000
     log_interval: 1
-    online_test_epoch: 10
+    online_test_epoch: 100
     batch_size: 512
     num_epochs: 300
 
     state_dim: 256
     action_dim: 4
     hidden_dim: 128
-    lr: 0.0002
+    # lr: 0.0002
+    actor_lr: 0.0002
+    critic_lr: 0.0005
     alpha_lr: 0.0001
     target_entropy: 1.08
     log_alpha_min: -10.0
@@ -189,37 +196,67 @@ TRAIN:
     REWARD_MAX_CLIP:
 
   DORL:
+
+    type: "sac"  # 当前分支: sac | ppo
     DORL_PT_ROOT: "media/pt/offline_muti_embedding_DORL"
     VAL_DORL_PT_ROOT: "data_DORL_pt_validation"
     action_dim: 4
     hidden_dim: 256
-    actor_lr: 0.0003
-    critic_lr: 0.0003
-    alpha_lr: 0.0001
-    target_entropy: 0.2
     gamma: 0.99
-    tau: 0.005
-    batch_size: 256
-    buffer_size: 2000
-    warmup_steps: 2000
-    updates_per_step: 1
     max_grad_norm: 1.0
-    q_target_min: -100.0
-    q_target_max: 100.0
-    log_alpha_min: -10.0
-    log_alpha_max: 2.0
-    train_epochs: 30
+    train_epochs: 300
     episodes_per_epoch: 0 # episodes_per_epoch = env.episodes
     max_steps: 200
     save_every: 5
-    ckpt_dir: "media/DORL/ckpt"
-    tb_log_dir: "media/DORL/log"
     stochastic_policy: True
     greedy_prob_start: 0.15
-    greedy_prob_end: 0.02
-    greedy_decay_epochs: 25
+    greedy_prob_end: 0.0
+    greedy_decay_epochs: 40
     log_interval: 100
     mismatch_reward: -1.0
+    sac:
+      actor_lr: 0.0001
+      critic_lr: 0.0002
+      alpha_lr: 0.0001
+      target_entropy: 0.2
+      tau: 0.005
+      batch_size: 256
+      buffer_size: 2000
+      warmup_steps: 2000
+      updates_per_step: 1
+      q_target_min: -100.0
+      q_target_max: 100.0
+      log_alpha_min: -10.0
+      log_alpha_max: 2.0
+      ckpt_dir: "media/DORL/ckpt"
+      tb_log_dir: "media/DORL/log"
+    ppo:
+      actor_lr: 0.0001
+      critic_lr: 0.0002
+      gae_lambda: 0.95
+      ppo_clip: 0.15
+      ppo_epochs: 6
+      minibatch_size: 512
+      value_coef: 0.5
+      entropy_coef: 0.01
+      entropy_coef_end: 0.001
+      entropy_decay_epochs: 120
+      target_kl: 0.02
+      value_clip: 0.2
+      lr_decay_enable: True
+      eval_greedy_episodes: 128
+      advantage_norm_eps: 1.0e-8
+      ckpt_dir: "media/DORL/ckpt_ppo"
+      tb_log_dir: "media/DORL/log_ppo"
+      # Habitat online eval each epoch
+      online_eval_enable: True
+      online_eval_hybrid_ckpt: "media/HYBRID/20260307_235109/model_epoch_301.pth"
+      online_eval_every: 1
+      online_eval_episodes: 16
+      online_eval_max_steps: 200
+      online_eval_greedy: True
+      online_eval_split: "val_multiple"
+      online_eval_log_every: 0
 
 EVAL:
   OPEN: False

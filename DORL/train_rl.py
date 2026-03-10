@@ -135,7 +135,7 @@ class DORLSACTrainer:
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.cfg.actor_lr)
         self.q1_opt = torch.optim.Adam(self.q1.parameters(), lr=self.cfg.critic_lr)
         self.q2_opt = torch.optim.Adam(self.q2.parameters(), lr=self.cfg.critic_lr)
-        self.log_alpha = torch.tensor(0.0, device=self.device, requires_grad=True)
+        self.log_alpha = torch.tensor(np.log(1), device=self.device, requires_grad=True)
         self.alpha_opt = torch.optim.Adam([self.log_alpha], lr=self.cfg.alpha_lr)
         if self.cfg.target_entropy is None:
             self.target_entropy = 0.98 * np.log(float(self.cfg.action_dim))
@@ -245,7 +245,7 @@ class DORLSACTrainer:
 
         # Critic updates should not backprop through the shared encoder graph twice.
         # Use a detached embedding for Q updates; actor update below uses `emb`.
-        emb_critic = states.detach()
+        emb_critic = states
         q1_pred_all = self.q1(emb_critic)
         q2_pred_all = self.q2(emb_critic)
         q1_pred = q1_pred_all.gather(1, actions)
@@ -276,14 +276,15 @@ class DORLSACTrainer:
         actor_loss.backward()
         nn.utils.clip_grad_norm_(self.actor.parameters(), self.cfg.max_grad_norm)
         self.actor_opt.step()
-
+        
+        
         entropy = -torch.sum(probs * log_probs, dim=1).mean()
-        alpha_loss = (alpha * (entropy.detach() - self.target_entropy)).mean()
-        self.alpha_opt.zero_grad()
-        alpha_loss.backward()
-        self.alpha_opt.step()
-        with torch.no_grad():
-            self.log_alpha.clamp_(self.cfg.log_alpha_min, self.cfg.log_alpha_max)
+        alpha_loss = (self.log_alpha * (entropy.detach() - self.target_entropy)).mean()
+        # self.alpha_opt.zero_grad()
+        # alpha_loss.backward()
+        # self.alpha_opt.step()
+        # with torch.no_grad():
+        #     self.log_alpha.clamp_(self.cfg.log_alpha_min, self.cfg.log_alpha_max)
 
         self._soft_update(self.q1, self.target_q1)
         self._soft_update(self.q2, self.target_q2)
@@ -302,6 +303,7 @@ class DORLSACTrainer:
             "alpha": float(self._alpha().item()),
             "entropy": float(entropy.item()),
         }
+        
     def _episode_spl(self, done: bool, info: Dict[str, Any]) -> float:
         """
         DORL 定义:
@@ -388,7 +390,8 @@ class DORLSACTrainer:
                         if metrics is not None:
                             epoch_updates += 1.0
 
-                    if self.writer:
+                    # if self.writer:
+                    if self.cfg.log_interval > 0 and global_step % self.cfg.log_interval == 0:
                         self.writer.add_scalar("dorl/step_reward", float(reward), global_step)
                         self.writer.add_scalar("dorl/step_done", float(done), global_step)
                         self.writer.add_scalar("dorl/step_matched", float(matched), global_step)

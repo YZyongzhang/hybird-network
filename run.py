@@ -169,6 +169,132 @@ def _obs_to_inputs(obs):
     return audio, rgb, depth
 
 
+def _fit_state_dim(state: torch.Tensor, state_dim: int) -> torch.Tensor:
+    t = state.detach().float().view(-1).cpu()
+    if t.numel() > state_dim:
+        return t[:state_dim]
+    if t.numel() < state_dim:
+        return torch.cat([t, torch.zeros(state_dim - t.numel(), dtype=torch.float32)], dim=0)
+    return t
+
+
+def _get_dorl_value(dorl_config, dorl_algo: str, key: str, default):
+    algo_cfg = getattr(dorl_config, dorl_algo, None)
+    if algo_cfg is not None and hasattr(algo_cfg, key):
+        return getattr(algo_cfg, key)
+    return getattr(dorl_config, key, default)
+
+
+def _build_dorl_ppo_online_eval_fn(config, dorl_config, dorl_algo: str = "ppo"):
+    eval_cfg = config.TASK_CONFIG.EVAL
+    eval_enable = bool(_get_dorl_value(dorl_config, dorl_algo, "online_eval_enable", True))
+    if not eval_enable:
+        return None
+
+    hybrid_ckpt = str(_get_dorl_value(dorl_config, dorl_algo, "online_eval_hybrid_ckpt", "")).strip()
+    if not hybrid_ckpt:
+        hybrid_ckpt = str(getattr(eval_cfg, "DORL_HYBRID_CKPT", "")).strip()
+    if not hybrid_ckpt:
+        hybrid_ckpt = str(getattr(eval_cfg, "HYBRID_CKPT", "")).strip()
+    if not hybrid_ckpt:
+        logger.warning("skip PPO online eval: no hybrid checkpoint configured.")
+        return None
+    if not os.path.exists(hybrid_ckpt):
+        logger.warning("skip PPO online eval: hybrid checkpoint not found: %s", hybrid_ckpt)
+        return None
+
+    split_name = str(
+        _get_dorl_value(dorl_config, dorl_algo, "online_eval_split", getattr(eval_cfg, "DORL_DATASET_SPLIT", ""))
+    ).strip()
+    episodes = int(_get_dorl_value(dorl_config, dorl_algo, "online_eval_episodes", 16))
+    max_steps = int(_get_dorl_value(dorl_config, dorl_algo, "online_eval_max_steps", getattr(eval_cfg, "MAX_STEPS", 200)))
+    greedy = bool(_get_dorl_value(dorl_config, dorl_algo, "online_eval_greedy", True))
+    every = max(1, int(_get_dorl_value(dorl_config, dorl_algo, "online_eval_every", 1)))
+    log_every = int(_get_dorl_value(dorl_config, dorl_algo, "online_eval_log_every", 0))
+
+    eval_run_cfg = _clone_config_with_dataset_split(config, split_name)
+    eval_env = Env(eval_run_cfg)
+    hybrid_model = _load_hybrid_model(hybrid_ckpt)
+    hybrid_device = next(hybrid_model.parameters()).device
+    logger.info(
+        "DORL PPO online eval enabled: split=%s episodes=%s max_steps=%s greedy=%s every=%s hybrid_ckpt=%s",
+        eval_run_cfg.TASK_CONFIG.DATASET.SPLIT,
+        episodes,
+        max_steps,
+        greedy,
+        every,
+        hybrid_ckpt,
+    )
+
+    def _online_eval_fn(actor, state_dim: int, actor_device: torch.device, epoch: int):
+        if epoch % every != 0:
+            return {}
+
+        run_episodes = max(1, episodes)
+        total_reward = 0.0
+        total_spl = 0.0
+        total_distance = 0.0
+
+        for ep_idx in range(run_episodes):
+            obs = eval_env.reset()
+            episode_reward = 0.0
+            pre_rgb = None
+            pre_depth = None
+            info = {"spl": 0.0, "distance_to_goal": -1.0}
+
+            for _ in range(max_steps):
+                with torch.no_grad():
+                    audio, rgb, depth = _obs_to_inputs(obs)
+                    if pre_rgb is None:
+                        pre_rgb = torch.zeros_like(rgb)
+                    if pre_depth is None:
+                        pre_depth = torch.zeros_like(depth)
+
+                    trgb = torch.cat([pre_rgb, rgb], dim=2)
+                    tdepth = torch.cat([pre_depth, depth], dim=2)
+                    state = hybrid_model.embedding_forward(
+                        audio.to(hybrid_device),
+                        trgb.to(hybrid_device),
+                        tdepth.to(hybrid_device),
+                    )
+                    state = _fit_state_dim(state, state_dim).to(actor_device).unsqueeze(0)
+                    logits = actor(state)
+                    probs = F.softmax(logits, dim=-1)
+                    if greedy:
+                        action = int(torch.argmax(probs, dim=-1).item())
+                    else:
+                        action = int(torch.distributions.Categorical(probs).sample().item())
+
+                obs, reward, done, info = eval_env.step(action=action)
+                episode_reward += float(reward)
+                pre_rgb = rgb
+                pre_depth = depth
+                if done:
+                    break
+
+            total_reward += episode_reward
+            total_spl += float(info.get("spl", 0.0))
+            total_distance += float(info.get("distance_to_goal", -1.0))
+            if log_every > 0 and ((ep_idx + 1) % log_every == 0):
+                logger.info(
+                    "dorl ppo online eval epoch=%s episode=%s/%s reward=%.4f spl=%.4f distance=%.4f",
+                    epoch,
+                    ep_idx + 1,
+                    run_episodes,
+                    episode_reward,
+                    float(info.get("spl", 0.0)),
+                    float(info.get("distance_to_goal", -1.0)),
+                )
+
+        return {
+            "reward": total_reward / float(run_episodes),
+            "spl": total_spl / float(run_episodes),
+            "distance": total_distance / float(run_episodes),
+        }
+
+    return _online_eval_fn
+
+
 def _rotation_to_list(rotation):
     if rotation is None:
         return [0.0, 0.0, 0.0, 1.0]
@@ -371,8 +497,9 @@ def _build_offline_agent(config, offline_config):
     state_dim = offline_config.state_dim
     action_dim = offline_config.action_dim
     hidden_dim = offline_config.hidden_dim
-    lr = offline_config.lr
-    alpha_lr = float(getattr(offline_config, "alpha_lr", lr))
+    actor_lr = offline_config.actor_lr
+    critic_lr = offline_config.critic_lr
+    alpha_lr = float(getattr(offline_config, "alpha_lr", 0.0001))
     tau = offline_config.tau
     gamma = offline_config.gamma
     beta = offline_config.beta
@@ -389,8 +516,8 @@ def _build_offline_agent(config, offline_config):
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
-            actor_lr=lr,
-            critic_lr=lr,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
             alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
@@ -409,8 +536,8 @@ def _build_offline_agent(config, offline_config):
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
-            actor_lr=lr,
-            critic_lr=lr,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
             alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
@@ -430,8 +557,8 @@ def _build_offline_agent(config, offline_config):
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
-            actor_lr=lr,
-            critic_lr=lr,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
             alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
@@ -453,8 +580,8 @@ def _build_offline_agent(config, offline_config):
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
-            actor_lr=lr,
-            critic_lr=lr,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
             alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
@@ -480,8 +607,8 @@ def _build_offline_agent(config, offline_config):
             state_dim=state_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
-            actor_lr=lr,
-            critic_lr=lr,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
             alpha_lr=alpha_lr,
             target_entropy=target_entropy,
             tau=tau,
@@ -516,7 +643,7 @@ def _build_offline_agent(config, offline_config):
             action_size=action_dim,
             tau=tau,
             hidden_size=hidden_dim,
-            learning_rate=lr,
+            learning_rate=actor_lr,
             with_lagrange=False,
             target_action_gap=0,
             device=device,
@@ -534,7 +661,7 @@ def _build_offline_agent(config, offline_config):
             action_size=action_dim,
             tau=tau,
             hidden_size=hidden_dim,
-            learning_rate=lr,
+            learning_rate=actor_lr,
             with_lagrange=False,
             target_action_gap=0,
             device=device,
@@ -662,55 +789,107 @@ def _run_train(config, train_config):
 
     if train_config.TYPE == "DORL":
         from DORL.train_rl import DORLTrainConfig, run_dorl_train
+        from DORL.train_rl_ppo import DORLPPOTrainConfig, run_dorl_ppo_train
 
         dorl_config = train_config.DORL
-        target_entropy = getattr(dorl_config, "target_entropy", None)
-        if target_entropy in ("", "None"):
-            target_entropy = None
-        elif target_entropy is not None:
-            target_entropy = float(target_entropy)
+        dorl_algo = str(getattr(dorl_config, "type", "sac")).strip().lower()
+        dorl_get = lambda key, default: _get_dorl_value(dorl_config, dorl_algo, key, default)
+        dorl_pt_root = str(dorl_get("DORL_PT_ROOT", "media/pt/offline_muti_embedding_DORL"))
+        mismatch_reward = float(dorl_get("mismatch_reward", -10.0))
 
-        dorl_cfg = DORLTrainConfig(
-            action_dim=int(getattr(dorl_config, "action_dim", 4)),
-            hidden_dim=int(getattr(dorl_config, "hidden_dim", 256)),
-            actor_lr=float(getattr(dorl_config, "actor_lr", 3e-4)),
-            critic_lr=float(getattr(dorl_config, "critic_lr", 3e-4)),
-            alpha_lr=float(getattr(dorl_config, "alpha_lr", 1e-4)),
-            target_entropy=target_entropy,
-            gamma=float(getattr(dorl_config, "gamma", 0.99)),
-            tau=float(getattr(dorl_config, "tau", 0.005)),
-            batch_size=int(getattr(dorl_config, "batch_size", 256)),
-            buffer_size=int(getattr(dorl_config, "buffer_size", 200000)),
-            warmup_steps=int(getattr(dorl_config, "warmup_steps", 2000)),
-            updates_per_step=int(getattr(dorl_config, "updates_per_step", 1)),
-            max_grad_norm=float(getattr(dorl_config, "max_grad_norm", 1.0)),
-            q_target_min=float(getattr(dorl_config, "q_target_min", -100.0)),
-            q_target_max=float(getattr(dorl_config, "q_target_max", 100.0)),
-            log_alpha_min=float(getattr(dorl_config, "log_alpha_min", -10.0)),
-            log_alpha_max=float(getattr(dorl_config, "log_alpha_max", 2.0)),
-            train_epochs=int(getattr(dorl_config, "train_epochs", 50)),
-            episodes_per_epoch=int(getattr(dorl_config, "episodes_per_epoch", 0)),
-            max_steps=int(getattr(dorl_config, "max_steps", 200)),
-            save_every=int(getattr(dorl_config, "save_every", 5)),
-            ckpt_dir=str(getattr(dorl_config, "ckpt_dir", "media/DORL/ckpt")),
-            stochastic_policy=bool(getattr(dorl_config, "stochastic_policy", True)),
-            greedy_prob_start=float(getattr(dorl_config, "greedy_prob_start", 0.15)),
-            greedy_prob_end=float(getattr(dorl_config, "greedy_prob_end", 0.02)),
-            greedy_decay_epochs=int(getattr(dorl_config, "greedy_decay_epochs", 25)),
-            tb_log_dir=str(getattr(dorl_config, "tb_log_dir", "media/DORL/log")),
-            log_interval=int(getattr(dorl_config, "log_interval", 100)),
-            reward_unscale_enable=bool(getattr(dorl_config, "reward_unscale_enable", False)),
-            reward_scale_factor=float(getattr(dorl_config, "reward_scale_factor", 1.0)),
-            mismatch_reward=float(getattr(dorl_config, "mismatch_reward", -10.0)),
-        )
-        dorl_pt_root = str(getattr(dorl_config, "DORL_PT_ROOT", "media/pt/offline_muti_embedding_DORL"))
-        run_dorl_train(
-            dorl_pt_root=dorl_pt_root,
-            mismatch_reward=float(getattr(dorl_config, "mismatch_reward", -10.0)),
-            config=dorl_cfg,
-        )
-        logger.info("train finished: DORL")
-        return
+        if dorl_algo == "sac":
+            target_entropy = dorl_get("target_entropy", None)
+            if target_entropy in ("", "None"):
+                target_entropy = None
+            elif target_entropy is not None:
+                target_entropy = float(target_entropy)
+
+            dorl_cfg = DORLTrainConfig(
+                action_dim=int(dorl_get("action_dim", 4)),
+                hidden_dim=int(dorl_get("hidden_dim", 256)),
+                actor_lr=float(dorl_get("actor_lr", 3e-4)),
+                critic_lr=float(dorl_get("critic_lr", 3e-4)),
+                alpha_lr=float(dorl_get("alpha_lr", 1e-4)),
+                target_entropy=target_entropy,
+                gamma=float(dorl_get("gamma", 0.99)),
+                tau=float(dorl_get("tau", 0.005)),
+                batch_size=int(dorl_get("batch_size", 256)),
+                buffer_size=int(dorl_get("buffer_size", 200000)),
+                warmup_steps=int(dorl_get("warmup_steps", 2000)),
+                updates_per_step=int(dorl_get("updates_per_step", 1)),
+                max_grad_norm=float(dorl_get("max_grad_norm", 1.0)),
+                q_target_min=float(dorl_get("q_target_min", -100.0)),
+                q_target_max=float(dorl_get("q_target_max", 100.0)),
+                log_alpha_min=float(dorl_get("log_alpha_min", -10.0)),
+                log_alpha_max=float(dorl_get("log_alpha_max", 2.0)),
+                train_epochs=int(dorl_get("train_epochs", 50)),
+                episodes_per_epoch=int(dorl_get("episodes_per_epoch", 0)),
+                max_steps=int(dorl_get("max_steps", 200)),
+                save_every=int(dorl_get("save_every", 5)),
+                ckpt_dir=str(dorl_get("ckpt_dir", "media/DORL/ckpt")),
+                stochastic_policy=bool(dorl_get("stochastic_policy", True)),
+                greedy_prob_start=float(dorl_get("greedy_prob_start", 0.15)),
+                greedy_prob_end=float(dorl_get("greedy_prob_end", 0.02)),
+                greedy_decay_epochs=int(dorl_get("greedy_decay_epochs", 25)),
+                tb_log_dir=str(dorl_get("tb_log_dir", "media/DORL/log")),
+                log_interval=int(dorl_get("log_interval", 100)),
+                reward_unscale_enable=bool(dorl_get("reward_unscale_enable", False)),
+                reward_scale_factor=float(dorl_get("reward_scale_factor", 1.0)),
+                mismatch_reward=mismatch_reward,
+            )
+            run_dorl_train(
+                dorl_pt_root=dorl_pt_root,
+                mismatch_reward=mismatch_reward,
+                config=dorl_cfg,
+            )
+            logger.info("train finished: DORL (sac)")
+            return
+
+        if dorl_algo == "ppo":
+            online_eval_fn = _build_dorl_ppo_online_eval_fn(config=config, dorl_config=dorl_config, dorl_algo=dorl_algo)
+            dorl_cfg = DORLPPOTrainConfig(
+                action_dim=int(dorl_get("action_dim", 4)),
+                hidden_dim=int(dorl_get("hidden_dim", 256)),
+                actor_lr=float(dorl_get("actor_lr", 3e-4)),
+                critic_lr=float(dorl_get("critic_lr", 3e-4)),
+                gamma=float(dorl_get("gamma", 0.99)),
+                gae_lambda=float(dorl_get("gae_lambda", 0.95)),
+                ppo_clip=float(dorl_get("ppo_clip", 0.2)),
+                ppo_epochs=int(dorl_get("ppo_epochs", 4)),
+                minibatch_size=int(dorl_get("minibatch_size", 256)),
+                value_coef=float(dorl_get("value_coef", 0.5)),
+                entropy_coef=float(dorl_get("entropy_coef", 0.01)),
+                entropy_coef_end=float(dorl_get("entropy_coef_end", 0.001)),
+                entropy_decay_epochs=int(dorl_get("entropy_decay_epochs", 80)),
+                max_grad_norm=float(dorl_get("max_grad_norm", 1.0)),
+                target_kl=float(dorl_get("target_kl", 0.02)),
+                value_clip=float(dorl_get("value_clip", 0.2)),
+                lr_decay_enable=bool(dorl_get("lr_decay_enable", True)),
+                eval_greedy_episodes=int(dorl_get("eval_greedy_episodes", 64)),
+                train_epochs=int(dorl_get("train_epochs", 50)),
+                episodes_per_epoch=int(dorl_get("episodes_per_epoch", 0)),
+                max_steps=int(dorl_get("max_steps", 200)),
+                save_every=int(dorl_get("save_every", 5)),
+                ckpt_dir=str(dorl_get("ckpt_dir", "media/DORL/ckpt_ppo")),
+                tb_log_dir=str(dorl_get("tb_log_dir", "media/DORL/log_ppo")),
+                stochastic_policy=bool(dorl_get("stochastic_policy", True)),
+                greedy_prob_start=float(dorl_get("greedy_prob_start", 0.15)),
+                greedy_prob_end=float(dorl_get("greedy_prob_end", 0.02)),
+                greedy_decay_epochs=int(dorl_get("greedy_decay_epochs", 25)),
+                log_interval=int(dorl_get("log_interval", 100)),
+                mismatch_reward=mismatch_reward,
+                advantage_norm_eps=float(dorl_get("advantage_norm_eps", 1e-8)),
+            )
+            run_dorl_ppo_train(
+                dorl_pt_root=dorl_pt_root,
+                mismatch_reward=mismatch_reward,
+                config=dorl_cfg,
+                online_eval_fn=online_eval_fn,
+            )
+            logger.info("train finished: DORL (ppo)")
+            return
+
+        raise ValueError(f"Unsupported TRAIN.DORL.type: {dorl_algo} (expected 'sac' or 'ppo')")
 
     raise ValueError(f"Unsupported TRAIN.TYPE: {train_config.TYPE}")
 

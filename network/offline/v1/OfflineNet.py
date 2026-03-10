@@ -70,10 +70,10 @@ class SAC_model(torch.nn.Module):
         self.critic_2_optimizer = torch.optim.Adam(self.critic_2.parameters(),
                                                    lr=critic_lr)
         # 使用alpha的log值,可以使训练结果比较稳定
-        # self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float) # 能跑出spl0.3的版本
-        self.log_alpha = torch.nn.Parameter(
-            torch.tensor(np.log(1.0), dtype=torch.float32, device=device)
-        )
+        self.log_alpha = torch.tensor(np.log(1), dtype=torch.float , requires_grad=True) 
+        # self.log_alpha = torch.nn.Parameter(
+        #     torch.tensor(np.log(1.0), dtype=torch.float32, device=device)
+        # )
         self.log_alpha_optimizer = torch.optim.Adam([self.log_alpha],
                                                     lr=alpha_lr)
         self.target_entropy = target_entropy  # 目标熵的大小
@@ -108,7 +108,7 @@ class SAC_model(torch.nn.Module):
             min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
                                    dim=1,
                                    keepdim=True)
-            next_value = min_qvalue + self._alpha() * entropy
+            next_value = min_qvalue + self._alpha().detach() * entropy
             td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target
 
@@ -141,15 +141,14 @@ class SAC_model(torch.nn.Module):
         # actor update should not backprop through temperature parameter.
         alpha = self._alpha()
         actor_loss = torch.mean(-alpha.detach() * entropy - min_qvalue)
-        # actor_loss = (probs * (self.log_alpha.exp().to(self.device) * log_probs - min_qvalue )).sum(1).mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
         # 更新alpha值
-        alpha_for_loss = self._alpha()
+        # alpha_for_loss = self._alpha()
         alpha_loss = torch.mean(
-            (entropy - self.target_entropy).detach() * alpha_for_loss)
+            (entropy - self.target_entropy).detach() * self.log_alpha)
         # alpha_loss = - (self.log_alpha.exp() * (log_probs.cpu() + self.target_entropy).detach().cpu()).mean()
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()

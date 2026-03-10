@@ -1,0 +1,114 @@
+{
+  "input": {
+    "pickle_list": null,
+    "paths_arg": "[\"dataset-data3/dataset/pickle/offline(muti_collided)\",\"dataset-data3/dataset/pickle/hybird(heard_train_multiple)\"]",
+    "num_input_paths": 2,
+    "num_discovered_files": 50,
+    "max_files": 50,
+    "thresholds": {
+      "stop_action_id": 0,
+      "success_distance_threshold": 1.0,
+      "success_reward_threshold": 0.0,
+      "collision_reward_threshold": -4.0
+    }
+  },
+  "summary": {
+    "total_episodes": 50,
+    "total_steps": 5051,
+    "success_episode_count": 26,
+    "success_episode_ratio": 0.52,
+    "collision_episode_count": 45,
+    "collision_episode_ratio": 0.9,
+    "early_stop_episode_count": 8,
+    "early_stop_episode_ratio": 0.16,
+    "collision_step_count": 654,
+    "collision_step_ratio": 0.1294793110275193
+  },
+  "reward_range": {
+    "min": -1.01,
+    "max": 9.99,
+    "mean": 0.12066719461492777,
+    "p01": -1.01,
+    "p50": -0.01,
+    "p95": 0.99,
+    "p99": 0.99
+  },
+  "early_stop_range": {
+    "terminal_reward": {
+      "min": -0.01,
+      "max": -0.01,
+      "mean": -0.01
+    },
+    "terminal_distance_to_goal": {
+      "min": 2.0,
+      "max": 5.0,
+      "mean": 2.875
+    }
+  },
+  "initial_distance_distribution": {
+    "count": 50,
+    "summary": {
+      "min": 4.0,
+      "max": 32.0,
+      "mean": 11.64,
+      "p50": 8.0,
+      "p95": 25.64999999999999
+    },
+    "histogram": {
+      "edges": [
+        4.0,
+        5.4,
+        6.8,
+        8.2,
+        9.6,
+        11.0,
+        12.399999999999999,
+        13.799999999999999,
+        15.2,
+        16.6,
+        18.0,
+        19.4,
+        20.799999999999997,
+        22.2,
+        23.599999999999998,
+        25.0,
+        26.4,
+        27.799999999999997,
+        29.2,
+        30.599999999999998,
+        32.0
+      ],
+      "counts": [
+        17,
+        4,
+        6,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        3,
+        0,
+        3,
+        3,
+        2,
+        0,
+        2,
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "skipped_files": [],
+  "figures": {
+    "episode_ratios_bar": "tmp/raw_pickle_figs_demo_50/episode_ratios_bar.png",
+    "collision_step_ratio_pie": "tmp/raw_pickle_figs_demo_50/collision_step_ratio_pie.png",
+    "reward_hist": "tmp/raw_pickle_figs_demo_50/reward_hist.png",
+    "initial_distance_hist": "tmp/raw_pickle_figs_demo_50/initial_distance_hist.png",
+    "early_stop_terminal_distance_box": "tmp/raw_pickle_figs_demo_50/early_stop_terminal_distance_box.png",
+    "analysis_overview": "tmp/raw_pickle_figs_demo_50/analysis_overview.png"
+  }
+}
