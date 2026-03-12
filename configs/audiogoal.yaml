@@ -58,7 +58,7 @@ COLLECT:
   COLLECT_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
 
 PT:
-  OPEN: True
+  OPEN: False
   TYPE: "OfflineTwoFrameWithHybridPT" # offlinelstm_v15 | offlinetransformer_v16
   RAW_DATA_PATH: 
     - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
@@ -83,7 +83,7 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   # 一级分支（TRAIN.TYPE）:
   # - HybirdNetwork / HybirdNetworkAudio
   # - OfflineRL -> 使用 TRAIN.OFFLINE
@@ -110,7 +110,7 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/mass_offline_data"
+      - "media/pt/mass_offline_data_no_reward_rescale"
     ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
     RANDOM_SHARD_RELOAD: True
@@ -123,7 +123,7 @@ TRAIN:
 
     replay_epoch: 1000
     log_interval: 1
-    online_test_epoch: 100
+    online_test_epoch: 1
     batch_size: 512
     num_epochs: 300
 
@@ -131,15 +131,16 @@ TRAIN:
     action_dim: 4
     hidden_dim: 128
     # lr: 0.0002
-    actor_lr: 0.0002
-    critic_lr: 0.0005
-    alpha_lr: 0.0001
+    actor_lr: 0.00002
+    critic_lr: 0.00005
+    alpha_lr: 0.00001
     target_entropy: 1.08
     log_alpha_min: -10.0
     log_alpha_max: 2.0
     tau: 0.005
     beta: 0.5
-    gamma: 0.99
+    # gamma: 0.99
+    gamma: 0.75 
     lstm_hidden_dim: 256
     lstm_num_layers: 1
     lstm_seq_len: 5

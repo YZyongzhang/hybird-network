@@ -108,6 +108,7 @@ class SAC_model(torch.nn.Module):
             min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
                                    dim=1,
                                    keepdim=True)
+            min_qvalue.clamp_(-100 , 100)
             next_value = min_qvalue + self._alpha().detach() * entropy
             td_target = rewards + self.gamma * next_value.squeeze(1) * (1 - dones)
         return td_target

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Batch runner for OfflineRL model variants.
+Batch runner for OfflineRL v1 hyper-parameter sweeps.
 
-It trains each requested OfflineRL version sequentially, then runs a quick
-online rollout evaluation, and finally reports the best-performing version.
+Design goals:
+- Always run OfflineRL v1.
+- Sweep parameter combinations sequentially overnight.
+- Save per-run parameter snapshot for reproducibility.
 """
 
 from __future__ import annotations
@@ -11,80 +13,66 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import itertools
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List
 
 import torch
 
 
 @dataclass
 class RunResult:
-    model: str
+    run_id: str
     status: str
-    train_ckpt: str = ""
-    avg_reward: Optional[float] = None
-    avg_spl: Optional[float] = None
+    params: Dict[str, float]
+    run_dir: str = ""
     error: str = ""
     train_seconds: float = 0.0
-    eval_seconds: float = 0.0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train OfflineRL versions one-by-one overnight and pick the best one."
+        description="Sweep OfflineRL v1 parameters and keep machine busy overnight."
     )
-    parser.add_argument(
-        "--models",
-        nargs="+",
-        default=["v1", "v1_3", "v1_4", "v1_5", "v1_6", "v2", "v4", "v5"],
-        help="Offline model variants to run in order.",
-    )
-    parser.add_argument("--epochs", type=int, default=80, help="Override TRAIN.OFFLINE.num_epochs.")
+
+    parser.add_argument("--epochs", type=int, default=80, help="TRAIN.OFFLINE.num_epochs")
     parser.add_argument(
         "--online-test-epoch",
         type=int,
         default=0,
-        help="Override TRAIN.OFFLINE.online_test_epoch (0 means disable during training).",
+        help="TRAIN.OFFLINE.online_test_epoch (0 means disable during training)",
     )
+    parser.add_argument("--split", type=str, default="val_multiple", help="dataset split")
+
+    # v1 parameter sweeps
+    parser.add_argument("--betas", type=float, nargs="+", default=[0.3, 0.5, 0.7, 1.0])
+    parser.add_argument("--actor-lrs", type=float, nargs="+", default=[2e-4])
+    parser.add_argument("--critic-lrs", type=float, nargs="+", default=[5e-4])
+    parser.add_argument("--alpha-lrs", type=float, nargs="+", default=[1e-4])
+    parser.add_argument("--gammas", type=float, nargs="+", default=[0.99])
+    parser.add_argument("--taus", type=float, nargs="+", default=[0.005])
+    parser.add_argument("--target-entropies", type=float, nargs="+", default=[1.08])
+    parser.add_argument("--batch-sizes", type=int, nargs="+", default=[512])
+
     parser.add_argument(
-        "--eval-episodes",
-        type=int,
-        default=16,
-        help="Rollout episodes per model after training.",
-    )
-    parser.add_argument(
-        "--eval-max-steps",
-        type=int,
-        default=200,
-        help="Max steps per rollout episode during evaluation.",
-    )
-    parser.add_argument(
-        "--split",
-        type=str,
-        default="val_multiple",
-        help="Dataset split for post-train evaluation.",
-    )
-    parser.add_argument(
-        "--ckpt-root",
-        type=str,
-        default="media/TRAIN_BATCH",
-        help="Root directory for this batch's checkpoints.",
-    )
-    parser.add_argument(
-        "--report",
+        "--grid-json",
         type=str,
         default="",
-        help="Optional output json path. Default: tmp/run_batch_<timestamp>.json",
+        help=(
+            "optional json file to define explicit param list. "
+            "format: [{\"beta\":0.5,\"actor_lr\":0.0002,...}, ...]"
+        ),
     )
-    parser.add_argument(
-        "--stop-on-error",
-        action="store_true",
-        help="Stop the whole batch immediately when one model fails.",
-    )
+    parser.add_argument("--max-runs", type=int, default=0, help="truncate run count (0 means no limit)")
+
+    parser.add_argument("--ckpt-root", type=str, default="media/TRAIN_BATCH_V1")
+    parser.add_argument("--report", type=str, default="")
+    parser.add_argument("--stop-on-error", action="store_true")
+
     return parser.parse_args()
 
 
@@ -94,15 +82,15 @@ def _cleanup_cuda() -> None:
         torch.cuda.empty_cache()
 
 
-def _latest_checkpoint(dir_path: Path) -> str:
+def _remove_checkpoints(dir_path: Path) -> int:
     if not dir_path.exists():
-        return ""
-    files = sorted(
-        [p for p in dir_path.rglob("*.pth") if p.is_file()],
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    return str(files[0]) if files else ""
+        return 0
+    removed = 0
+    for p in dir_path.rglob("*.pth"):
+        if p.is_file():
+            p.unlink()
+            removed += 1
+    return removed
 
 
 def _load_run_module():
@@ -115,14 +103,92 @@ def _load_run_module():
     return module
 
 
-def _prepare_config_for_model(
+def _short(v: float) -> str:
+    s = f"{v:.6g}"
+    return s.replace("-", "m").replace(".", "p")
+
+
+def _run_id(idx: int, params: Dict[str, float]) -> str:
+    return (
+        f"{idx:03d}_v1"
+        f"_beta{_short(float(params['beta']))}"
+        f"_alr{_short(float(params['actor_lr']))}"
+        f"_clr{_short(float(params['critic_lr']))}"
+        f"_ent{_short(float(params['target_entropy']))}"
+    )
+
+
+def _build_param_list(args: argparse.Namespace) -> List[Dict[str, float]]:
+    if args.grid_json:
+        with open(args.grid_json, "r", encoding="utf-8") as f:
+            items = json.load(f)
+        if not isinstance(items, list) or not items:
+            raise ValueError("grid-json must be a non-empty list")
+        out: List[Dict[str, float]] = []
+        required = {
+            "beta",
+            "actor_lr",
+            "critic_lr",
+            "alpha_lr",
+            "gamma",
+            "tau",
+            "target_entropy",
+            "batch_size",
+        }
+        for i, obj in enumerate(items):
+            if not isinstance(obj, dict):
+                raise ValueError(f"grid-json item#{i} must be object")
+            missing = required - set(obj.keys())
+            if missing:
+                raise ValueError(f"grid-json item#{i} missing keys: {sorted(missing)}")
+            out.append(
+                {
+                    "beta": float(obj["beta"]),
+                    "actor_lr": float(obj["actor_lr"]),
+                    "critic_lr": float(obj["critic_lr"]),
+                    "alpha_lr": float(obj["alpha_lr"]),
+                    "gamma": float(obj["gamma"]),
+                    "tau": float(obj["tau"]),
+                    "target_entropy": float(obj["target_entropy"]),
+                    "batch_size": int(obj["batch_size"]),
+                }
+            )
+        return out
+
+    keys = [
+        "beta",
+        "actor_lr",
+        "critic_lr",
+        "alpha_lr",
+        "gamma",
+        "tau",
+        "target_entropy",
+        "batch_size",
+    ]
+    values = [
+        args.betas,
+        args.actor_lrs,
+        args.critic_lrs,
+        args.alpha_lrs,
+        args.gammas,
+        args.taus,
+        args.target_entropies,
+        args.batch_sizes,
+    ]
+    out: List[Dict[str, float]] = []
+    for combo in itertools.product(*values):
+        out.append(dict(zip(keys, combo)))
+    return out
+
+
+def _prepare_config_for_v1(
     get_config_fn,
-    model: str,
+    params: Dict[str, float],
     epochs: int,
     online_test_epoch: int,
     split: str,
-    ckpt_root: Path,
-) -> tuple:
+    run_dir: Path,
+):
     cfg = get_config_fn()
     cfg.defrost()
     cfg.TASK_CONFIG.defrost()
@@ -133,11 +199,21 @@ def _prepare_config_for_model(
     task_cfg.EVAL.OPEN = False
     task_cfg.TRAIN.OPEN = True
     task_cfg.TRAIN.TYPE = "OfflineRL"
+    task_cfg.DATASET.SPLIT = split
 
     offline = task_cfg.TRAIN.OFFLINE
     offline.TYPE = "OfflineRL"
-    offline.model = model
+    offline.model = "v1"
     offline.num_epochs = int(epochs)
+    offline.batch_size = int(params["batch_size"])
+
+    offline.beta = float(params["beta"])
+    offline.actor_lr = float(params["actor_lr"])
+    offline.critic_lr = float(params["critic_lr"])
+    offline.alpha_lr = float(params["alpha_lr"])
+    offline.gamma = float(params["gamma"])
+    offline.tau = float(params["tau"])
+    offline.target_entropy = float(params["target_entropy"])
 
     if online_test_epoch >= 0:
         if online_test_epoch == 0:
@@ -145,57 +221,32 @@ def _prepare_config_for_model(
         else:
             offline.online_test_epoch = int(online_test_epoch)
 
-    model_ckpt_dir = ckpt_root / model
-    model_ckpt_dir.mkdir(parents=True, exist_ok=True)
-    offline.EXPERIMENT_CKPT_DIR = str(model_ckpt_dir)
+    offline.EXPERIMENT_CKPT_DIR = str(run_dir)
 
-    task_cfg.DATASET.SPLIT = split
+    # snapshot params for reproducibility
+    snapshot = {
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "run_dir": str(run_dir),
+        "model": "v1",
+        "params": params,
+        "epochs": int(epochs),
+        "online_test_epoch": int(offline.online_test_epoch),
+        "split": split,
+        "offline_cfg_yaml": offline.dump(),
+    }
+    with open(run_dir / "config_snapshot.json", "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, indent=2, ensure_ascii=False)
 
     cfg.TASK_CONFIG.freeze()
     cfg.freeze()
-    return cfg, model_ckpt_dir
-
-
-def _evaluate_with_online_test(run_module, cfg, ckpt_path: str, eval_episodes: int, eval_max_steps: int):
-    cfg = cfg.clone()
-    cfg.defrost()
-    cfg.TASK_CONFIG.defrost()
-    cfg.TASK_CONFIG.TRAIN.OFFLINE.MAX_STEPS = int(eval_max_steps)
-    cfg.TASK_CONFIG.freeze()
-    cfg.freeze()
-
-    offline_cfg = cfg.TASK_CONFIG.TRAIN.OFFLINE
-
-    sac_model, _trainer, online_test = run_module._build_offline_agent(cfg, offline_cfg)
-    state = torch.load(ckpt_path, map_location=run_module._get_device())
-    sac_model.load_state_dict(state, strict=False)
-    sac_model.eval()
-
-    old_num_episodes = int(online_test.env._env.number_of_episodes)
-    try:
-        if int(eval_episodes) > 0:
-            online_test.env._env.number_of_episodes = int(eval_episodes)
-    except Exception:
-        pass
-
-    reward, spl = online_test.rollout(epoch=0, sac_model=sac_model, logger=run_module.logger)
-
-    try:
-        online_test.env._env.number_of_episodes = old_num_episodes
-    except Exception:
-        pass
-
-    return float(reward), float(spl)
+    return cfg
 
 
 def _print_result(res: RunResult) -> None:
     if res.status == "ok":
-        print(
-            f"[OK] model={res.model} avg_spl={res.avg_spl:.4f} avg_reward={res.avg_reward:.4f} "
-            f"train={res.train_seconds:.1f}s eval={res.eval_seconds:.1f}s ckpt={res.train_ckpt}"
-        )
+        print(f"[OK] {res.run_id} train={res.train_seconds:.1f}s")
     else:
-        print(f"[FAIL] model={res.model} error={res.error}")
+        print(f"[FAIL] {res.run_id} error={res.error}")
 
 
 def main() -> int:
@@ -204,109 +255,94 @@ def main() -> int:
 
     run_module = _load_run_module()
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ckpt_root = Path(args.ckpt_root) / ts
-    ckpt_root.mkdir(parents=True, exist_ok=True)
+    params_list = _build_param_list(args)
+    if args.max_runs and args.max_runs > 0:
+        params_list = params_list[: args.max_runs]
+    if not params_list:
+        raise RuntimeError("No run config generated.")
 
-    if args.report:
-        report_path = Path(args.report)
-    else:
-        report_path = Path("tmp") / f"run_batch_{ts}.json"
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    batch_root = Path(args.ckpt_root) / ts
+    batch_root.mkdir(parents=True, exist_ok=True)
+
+    report_path = Path(args.report) if args.report else Path("tmp") / f"run_batch_v1_{ts}.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print("=" * 90)
+    print("=" * 100)
     print(f"Batch start: {datetime.now().isoformat(timespec='seconds')}")
-    print(f"models={args.models}")
-    print(f"epochs={args.epochs} eval_episodes={args.eval_episodes} split={args.split}")
-    print(f"ckpt_root={ckpt_root}")
-    print("=" * 90)
+    print(f"model=v1 | total_runs={len(params_list)}")
+    print(f"epochs={args.epochs} split={args.split}")
+    print(f"batch_root={batch_root}")
+    print("=" * 100)
 
     results: List[RunResult] = []
 
-    for idx, model in enumerate(args.models, start=1):
-        print(f"\n[{idx}/{len(args.models)}] running model={model}")
-        res = RunResult(model=model, status="failed")
+    for idx, params in enumerate(params_list, start=1):
+        run_id = _run_id(idx, params)
+        print(f"\n[{idx}/{len(params_list)}] running {run_id}")
+
+        run_dir = batch_root / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        res = RunResult(run_id=run_id, status="failed", params=params, run_dir=str(run_dir))
         stop_now = False
 
         try:
-            cfg, model_ckpt_dir = _prepare_config_for_model(
+            cfg = _prepare_config_for_v1(
                 get_config_fn=get_config_fn,
-                model=model,
+                params=params,
                 epochs=args.epochs,
                 online_test_epoch=args.online_test_epoch,
                 split=args.split,
-                ckpt_root=ckpt_root,
+                run_dir=run_dir,
             )
 
             t0 = time.time()
             run_module._run_train(cfg, cfg.TASK_CONFIG.TRAIN)
             res.train_seconds = time.time() - t0
 
-            ckpt_path = _latest_checkpoint(model_ckpt_dir)
-            if not ckpt_path:
-                raise RuntimeError(f"No checkpoint found under: {model_ckpt_dir}")
-            res.train_ckpt = ckpt_path
-
-            t1 = time.time()
-            avg_reward, avg_spl = _evaluate_with_online_test(
-                run_module=run_module,
-                cfg=cfg,
-                ckpt_path=ckpt_path,
-                eval_episodes=args.eval_episodes,
-                eval_max_steps=args.eval_max_steps,
-            )
-            res.eval_seconds = time.time() - t1
-
-            res.avg_reward = avg_reward
-            res.avg_spl = avg_spl
+            _remove_checkpoints(run_dir)
             res.status = "ok"
         except Exception as exc:
             res.error = f"{type(exc).__name__}: {exc}"
             if args.stop_on_error:
                 stop_now = True
         finally:
+            # save per-run result file
+            with open(run_dir / "result.json", "w", encoding="utf-8") as f:
+                json.dump(asdict(res), f, indent=2, ensure_ascii=False)
+
             results.append(res)
             _print_result(res)
             _cleanup_cuda()
 
             payload = {
                 "created_at": datetime.now().isoformat(timespec="seconds"),
+                "mode": "offline_v1_param_sweep",
                 "args": vars(args),
+                "batch_root": str(batch_root),
                 "results": [asdict(r) for r in results],
             }
-            ok_results = [r for r in results if r.status == "ok" and r.avg_spl is not None]
-            if ok_results:
-                best = sorted(
-                    ok_results,
-                    key=lambda x: (float(x.avg_spl), float(x.avg_reward if x.avg_reward is not None else -1e9)),
-                    reverse=True,
-                )[0]
-                payload["best"] = asdict(best)
+            ok_results = [r for r in results if r.status == "ok"]
+            payload["ok_runs"] = len(ok_results)
+            payload["failed_runs"] = len(results) - len(ok_results)
+
             with open(report_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2, ensure_ascii=False)
 
         if stop_now:
             break
 
-    ok_results = [r for r in results if r.status == "ok" and r.avg_spl is not None]
-    print("\n" + "=" * 90)
-    if ok_results:
-        best = sorted(
-            ok_results,
-            key=lambda x: (float(x.avg_spl), float(x.avg_reward if x.avg_reward is not None else -1e9)),
-            reverse=True,
-        )[0]
-        print(
-            f"Best model: {best.model} | avg_spl={best.avg_spl:.4f} | "
-            f"avg_reward={best.avg_reward:.4f}"
-        )
-    else:
-        print("No successful model run in this batch.")
+    ok_results = [r for r in results if r.status == "ok"]
+    print("\n" + "=" * 100)
+    print(f"Finished runs: total={len(results)} ok={len(ok_results)} failed={len(results) - len(ok_results)}")
     print(f"Report saved to: {report_path}")
-    print("=" * 90)
+    print("=" * 100)
 
     return 0 if ok_results else 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+# python run_batch.py --epochs 100 --grid-json grid_json.json
+# 
