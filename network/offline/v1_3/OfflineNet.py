@@ -41,7 +41,7 @@ class QValueNet(torch.nn.Module):
         x = F.relu(self.fc1(x))
         return self.fc2(x)
 class SAC_Hybird_model(torch.nn.Module):
-    ''' 处理离散动作的SAC算法 '''
+    ''' 处理离散动作的SAC算法 , 和hybrid联合训练 '''
     def __init__(self,  state_dim, hidden_dim, action_dim, actor_lr, critic_lr,
                  alpha_lr, target_entropy, tau, gamma, beta ,device,
                  hybird_ckpt_path="heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"):

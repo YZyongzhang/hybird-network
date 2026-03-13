@@ -90,6 +90,7 @@ def _run_pt(pt_config):
         "offlinelstm_v15": "load_offline_lstm_v15",
         "offlinetransformer_v16": "load_offline_lstm_v15",
         "offlinetransformer": "load_offline_lstm_v15",
+        "offlinesequence":"load_offline_lstm_v15",
         "offlinelstm_by_level": "load_offline_lstm_level",
         "offlinelstm_by_level_audio_visual": "load_offline_lstm_level_audio_visual",
     }

@@ -30,7 +30,7 @@ class QValueNet(nn.Module):
         return self.fc2(x)
 
 
-class SAC_Transformer_CQL_v1_8(nn.Module):
+class SAC_Transformer_CQL_v1_6(nn.Module):
     """
     Offline SAC-CQL with causal Transformer temporal encoder.
     Input states are pre-encoded features from PT shards (shape: [B, T, D]),

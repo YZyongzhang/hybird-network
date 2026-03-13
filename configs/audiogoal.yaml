@@ -59,13 +59,13 @@ COLLECT:
 
 PT:
   OPEN: False
-  TYPE: "OfflineTwoFrameWithHybridPT" # offlinelstm_v15 | offlinetransformer_v16
+  TYPE: "offlinesequence"
   RAW_DATA_PATH: 
     - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale"
+  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale_sequence"
   CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   SHARD_SIZE: 10000
   # SEQ_LEN: 5
@@ -101,7 +101,7 @@ TRAIN:
 
   OFFLINE:
     TYPE: "OfflineRL"
-    model: "v1"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
+    model: "v1_5"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
     buffer: False
     SAVE_LOADER: False
 
@@ -110,7 +110,7 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/mass_offline_data_no_reward_rescale"
+      - "media/pt/mass_offline_data_reward_rescale_sequence"
     ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
     RANDOM_SHARD_RELOAD: True
