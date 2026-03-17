@@ -52,6 +52,33 @@ def _load_hybrid_model(ckpt_path):
     return model
 
 
+def _load_offline_v1_5_model(config, ckpt_path):
+    from network import SAC_LSTM_CQL_v1_5
+
+    offline_cfg = config.TASK_CONFIG.TRAIN.OFFLINE
+    device = _get_device()
+    logger.info("loading offline v1_5 model ckpt: %s", ckpt_path)
+    model = SAC_LSTM_CQL_v1_5(
+        state_dim=int(offline_cfg.state_dim),
+        hidden_dim=int(offline_cfg.hidden_dim),
+        action_dim=int(offline_cfg.action_dim),
+        actor_lr=float(offline_cfg.actor_lr),
+        critic_lr=float(offline_cfg.critic_lr),
+        alpha_lr=float(getattr(offline_cfg, "alpha_lr", 0.0001)),
+        target_entropy=float(offline_cfg.target_entropy),
+        tau=float(offline_cfg.tau),
+        gamma=float(offline_cfg.gamma),
+        beta=float(offline_cfg.beta),
+        device=device,
+        lstm_hidden_dim=int(getattr(offline_cfg, "lstm_hidden_dim", offline_cfg.state_dim)),
+        lstm_num_layers=int(getattr(offline_cfg, "lstm_num_layers", 1)),
+    ).to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device), strict=False)
+    model.eval()
+    logger.info("offline v1_5 model loaded on device=%s", device)
+    return model
+
+
 def _run_collect(config, collect_config):
     from col import COLLECTER
     from run import Collect
@@ -59,8 +86,22 @@ def _run_collect(config, collect_config):
     logger.info("task=COLLECT type=%s", collect_config.TYPE)
     logger.info("collect config: %s", collect_config)
     env = Env(config=config)
-    model = _load_hybrid_model(collect_config.COLLECT_CKPT)
-    collecter = COLLECTER(config, env, model=model)
+    collect_type = str(getattr(collect_config, "TYPE", "")).strip()
+    if collect_type == "offlineRL_v1_5":
+        hybrid_model = _load_hybrid_model(collect_config.COLLECT_CKPT)
+        offline_ckpt = str(getattr(collect_config, "OFFLINE_CKPT", "")).strip()
+        if not offline_ckpt:
+            raise ValueError("COLLECT.OFFLINE_CKPT is required when COLLECT.TYPE=offlineRL_v1_5")
+        offline_model = _load_offline_v1_5_model(config, offline_ckpt)
+        collecter = COLLECTER(
+            config,
+            env,
+            hybrid_model=hybrid_model,
+            offline_model=offline_model,
+        )
+    else:
+        model = _load_hybrid_model(collect_config.COLLECT_CKPT)
+        collecter = COLLECTER(config, env, model=model)
     logger.info("collect begin")
     Collect(collecter=collecter)
     logger.info("collect finished")

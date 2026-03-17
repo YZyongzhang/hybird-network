@@ -12,6 +12,7 @@ import pickle , copy , os ,random
 import numpy as np
 import habitat_sim
 import math
+from collections import deque
 from utils.visualizations import plot_top_down_map , draw_point
 
 
@@ -653,6 +654,132 @@ class OfflineCollect:
         
         with open(f"{self.save_data_dir}/{level}/{scene[-15:-4]}/{id.episode_id}.pkl" , 'wb' ) as f:
             pickle.dump(self.save_data , f)
+        self.save_data = None
+
+
+@CollectRegister.register("offlineRL_v1_5")
+class OfflineCollectV15:
+    """
+    Collect offline data with hybrid embedding + offline v1_5 policy.
+    Policy mix:
+      - offline model action (default major)
+      - oracle action
+      - random action
+    """
+
+    def __init__(self, env: AudioNavRLEnv, config: Config, **kwargs):
+        self.env = env
+        self.sim: SoundSpacesSim = env._env._sim
+        self.save_data_struct = config.DATA_STRUCT
+        self.save_data_dir = config.DATA_DIR
+        self.hybrid_model = kwargs["hybrid_model"]
+        self.offline_model = kwargs["offline_model"]
+
+        self.max_steps = int(getattr(config, "MAX_STEPS", 200))
+        self.seq_len = int(getattr(config, "LSTM_SEQ_LEN", 5))
+        self.policy_mix_offline = float(getattr(config, "POLICY_MIX_OFFLINE", 0.8))
+        self.policy_mix_oracle = float(getattr(config, "POLICY_MIX_ORACLE", 0.1))
+        self.policy_mix_random = float(getattr(config, "POLICY_MIX_RANDOM", 0.1))
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        total = self.policy_mix_offline + self.policy_mix_oracle + self.policy_mix_random
+        if total <= 0:
+            self.policy_mix_offline, self.policy_mix_oracle, self.policy_mix_random = 1.0, 0.0, 0.0
+        else:
+            self.policy_mix_offline /= total
+            self.policy_mix_oracle /= total
+            self.policy_mix_random /= total
+
+    def _save(self, **kwargs):
+        for key, value in kwargs.items():
+            if key not in self.save_data:
+                self.save_data[key] = []
+            self.save_data[key].append(value)
+        _append_pose_if_needed(self.save_data, self.sim, kwargs)
+
+    def _to_tensors(self, obs):
+        rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
+        depth = torch.from_numpy(obs["depth"]).float()
+        audio = torch.from_numpy(obs["spectrogram"][0]).float()
+        return audio, rgb, depth
+
+    def _oracle_action(self):
+        actions = self.sim.compute_oracle_actions() or []
+        for action in actions:
+            if action != 0:
+                return action
+        return 1
+
+    def _offline_action(self, seq_states):
+        seq_tensor = torch.stack(list(seq_states), dim=0).unsqueeze(0).to(self.device)
+        return int(self.offline_model.get_action(seq_tensor, eval=True))
+
+    def _sample_action(self, seq_states):
+        r = random.random()
+        if r < self.policy_mix_offline:
+            return self._offline_action(seq_states), "offline_v1_5"
+        if r < self.policy_mix_offline + self.policy_mix_oracle:
+            return self._oracle_action(), "oracle"
+        return random.choice([1, 2, 3]), "random"
+
+    def collect(self):
+        for _ in range(self.env._env.number_of_episodes):
+            self.save_data = copy.deepcopy(self.save_data_struct)
+            obs = self.env.reset()
+            done = False
+            step = 0
+            path_point = [self.sim.get_agent_state().position]
+            seq_states = deque(maxlen=self.seq_len)
+            prev_rgb = None
+            prev_depth = None
+
+            self._save(obs=obs, sound_id=self.env._env.current_episode.info["sound"])
+
+            while (not done) and (step < self.max_steps):
+                audio, rgb, depth = self._to_tensors(obs)
+                if prev_rgb is None:
+                    prev_rgb = torch.zeros_like(rgb)
+                if prev_depth is None:
+                    prev_depth = torch.zeros_like(depth)
+                trgb = torch.cat([prev_rgb, rgb], dim=2)
+                tdepth = torch.cat([prev_depth, depth], dim=2)
+
+                with torch.no_grad():
+                    emb = self.hybrid_model.embedding_forward(
+                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
+                    ).detach().cpu()
+                seq_states.append(emb)
+                while len(seq_states) < self.seq_len:
+                    seq_states.appendleft(torch.zeros_like(emb))
+
+                action, policy_source = self._sample_action(seq_states)
+                obs, reward, done, info = self.env.step(action=action)
+                collided = bool(self.sim.previous_step_collided)
+
+                self._save(
+                    obs=obs,
+                    reward=reward,
+                    done=done,
+                    info=info,
+                    action_id=action,
+                    policy_source=policy_source,
+                    collision=collided,
+                )
+                path_point.append(self.sim.get_agent_state().position)
+                prev_rgb = rgb
+                prev_depth = depth
+                step += 1
+
+            self._save(path_point=path_point)
+            self.store(self.env._env.current_episode.scene_id, self.env._env.current_episode)
+
+    def save(self, **kwargs):
+        self._save(**kwargs)
+
+    def store(self, scene, id):
+        os.makedirs(f"{self.save_data_dir}/{scene[-15:-4]}", exist_ok=True)
+        with open(f"{self.save_data_dir}/{scene[-15:-4]}/{id.episode_id}.pkl", "wb") as f:
+            pickle.dump(self.save_data, f)
         self.save_data = None
 
 

@@ -44,6 +44,14 @@ COLLECT:
   OPEN: False
   GRID_SIZE: 1.0
   TYPE: "collided"
+  # TYPE 可选新增: "offlineRL_v1_5"
+  # 当 TYPE=offlineRL_v1_5 时:
+  # - COLLECT_CKPT: hybrid/foundation 模型权重
+  # - OFFLINE_CKPT: offline v1_5 SAC 权重
+  # - LSTM_SEQ_LEN: v1_5 序列长度
+  OFFLINE_CKPT: "media/TRAIN/20260312_232051/sac_2level_model_68.pth"
+  LSTM_SEQ_LEN: 5
+  POLICY_MIX_OFFLINE: 0.80
   # Used by TYPE: "collided"
   MAX_STEPS: 200
   RECOVERY_MAX_TRIES: 4
@@ -52,10 +60,10 @@ COLLECT:
   POLICY_MIX_RANDOM: 0.10
   DATA_STRUCT:
     {"obs": [], "reward": [], "done": [], "action_id": [], "info": [], "map": [], "path_point": [], "sound_id": [], "greedy_action": [], "total_sound_point": []}
-  DATA_DIR: "dataset-data3/dataset/pickle/offline(muti_collided)"
+  DATA_DIR: "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
   IMG_DIR: ""
   IMG_TYPE: ""
-  COLLECT_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
+  COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
   OPEN: False
@@ -65,7 +73,8 @@ PT:
     - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale_sequence"
+    - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale_sequence_with_spl_17"
   CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   SHARD_SIZE: 10000
   # SEQ_LEN: 5
@@ -83,7 +92,7 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   # 一级分支（TRAIN.TYPE）:
   # - HybirdNetwork / HybirdNetworkAudio
   # - OfflineRL -> 使用 TRAIN.OFFLINE
@@ -110,7 +119,7 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/mass_offline_data_reward_rescale_sequence"
+      - "media/pt/mass_offline_data_no_reward_rescale_sequence_with_spl_17"
     ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
     RANDOM_SHARD_RELOAD: True
@@ -125,7 +134,7 @@ TRAIN:
     log_interval: 1
     online_test_epoch: 1
     batch_size: 512
-    num_epochs: 300
+    num_epochs: 150
 
     state_dim: 256
     action_dim: 4
@@ -260,10 +269,10 @@ TRAIN:
       online_eval_log_every: 0
 
 EVAL:
-  OPEN: False
-  TYPE: "OnlineRL"  # OfflineRL_v1_3 | OfflineRL_v1_5 | OnlineRL
-  HYBRID_CKPT: "compare/ckpt/hybirdnetwork_RGBD_two_frame/model_epoch_100.pth"
-  SAC_CKPT: "final/telephone/ckpt/8/sac_2level_model_300.pth"
+  OPEN: True
+  TYPE: "OfflineRL_v1_5"  # OfflineRL_v1_3 | OfflineRL_v1_5 | OnlineRL
+  HYBRID_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
+  SAC_CKPT: "media/TRAIN/20260316_214254/sac_2level_model_79.pth"
   EPISODES: 0
   MAX_STEPS: 200
   SEED: 0

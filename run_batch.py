@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Batch runner for OfflineRL v1 hyper-parameter sweeps.
+Batch runner for OfflineRL hyper-parameter sweeps.
 
 Design goals:
-- Always run OfflineRL v1.
+- Run OfflineRL v1 or v1_5.
 - Sweep parameter combinations sequentially overnight.
 - Save per-run parameter snapshot for reproducibility.
 """
@@ -36,7 +36,14 @@ class RunResult:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sweep OfflineRL v1 parameters and keep machine busy overnight."
+        description="Sweep OfflineRL parameters and keep machine busy overnight."
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="v1",
+        choices=["v1", "v1_5"],
+        help="TRAIN.OFFLINE.model to sweep",
     )
 
     parser.add_argument("--epochs", type=int, default=80, help="TRAIN.OFFLINE.num_epochs")
@@ -48,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--split", type=str, default="val_multiple", help="dataset split")
 
-    # v1 parameter sweeps
+    # shared parameter sweeps for v1 / v1_5
     parser.add_argument("--betas", type=float, nargs="+", default=[0.3, 0.5, 0.7, 1.0])
     parser.add_argument("--actor-lrs", type=float, nargs="+", default=[2e-4])
     parser.add_argument("--critic-lrs", type=float, nargs="+", default=[5e-4])
@@ -108,9 +115,10 @@ def _short(v: float) -> str:
     return s.replace("-", "m").replace(".", "p")
 
 
-def _run_id(idx: int, params: Dict[str, float]) -> str:
+def _run_id(idx: int, model: str, params: Dict[str, float]) -> str:
+    model_tag = model.replace(".", "_")
     return (
-        f"{idx:03d}_v1"
+        f"{idx:03d}_{model_tag}"
         f"_beta{_short(float(params['beta']))}"
         f"_alr{_short(float(params['actor_lr']))}"
         f"_clr{_short(float(params['critic_lr']))}"
@@ -181,8 +189,9 @@ def _build_param_list(args: argparse.Namespace) -> List[Dict[str, float]]:
     return out
 
 
-def _prepare_config_for_v1(
+def _prepare_config_for_model(
     get_config_fn,
+    model: str,
     params: Dict[str, float],
     epochs: int,
     online_test_epoch: int,
@@ -203,7 +212,7 @@ def _prepare_config_for_v1(
 
     offline = task_cfg.TRAIN.OFFLINE
     offline.TYPE = "OfflineRL"
-    offline.model = "v1"
+    offline.model = model
     offline.num_epochs = int(epochs)
     offline.batch_size = int(params["batch_size"])
 
@@ -227,7 +236,7 @@ def _prepare_config_for_v1(
     snapshot = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "run_dir": str(run_dir),
-        "model": "v1",
+        "model": model,
         "params": params,
         "epochs": int(epochs),
         "online_test_epoch": int(offline.online_test_epoch),
@@ -254,6 +263,9 @@ def main() -> int:
     from configs.default import get_config as get_config_fn
 
     run_module = _load_run_module()
+    model = str(args.model).strip()
+    if args.ckpt_root == "media/TRAIN_BATCH_V1" and model == "v1_5":
+        args.ckpt_root = "media/TRAIN_BATCH_V1_5"
 
     params_list = _build_param_list(args)
     if args.max_runs and args.max_runs > 0:
@@ -265,12 +277,16 @@ def main() -> int:
     batch_root = Path(args.ckpt_root) / ts
     batch_root.mkdir(parents=True, exist_ok=True)
 
-    report_path = Path(args.report) if args.report else Path("tmp") / f"run_batch_v1_{ts}.json"
+    report_path = (
+        Path(args.report)
+        if args.report
+        else Path("tmp") / f"run_batch_{model}_{ts}.json"
+    )
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("=" * 100)
     print(f"Batch start: {datetime.now().isoformat(timespec='seconds')}")
-    print(f"model=v1 | total_runs={len(params_list)}")
+    print(f"model={model} | total_runs={len(params_list)}")
     print(f"epochs={args.epochs} split={args.split}")
     print(f"batch_root={batch_root}")
     print("=" * 100)
@@ -278,7 +294,7 @@ def main() -> int:
     results: List[RunResult] = []
 
     for idx, params in enumerate(params_list, start=1):
-        run_id = _run_id(idx, params)
+        run_id = _run_id(idx, model, params)
         print(f"\n[{idx}/{len(params_list)}] running {run_id}")
 
         run_dir = batch_root / run_id
@@ -288,8 +304,9 @@ def main() -> int:
         stop_now = False
 
         try:
-            cfg = _prepare_config_for_v1(
+            cfg = _prepare_config_for_model(
                 get_config_fn=get_config_fn,
+                model=model,
                 params=params,
                 epochs=args.epochs,
                 online_test_epoch=args.online_test_epoch,
@@ -318,7 +335,7 @@ def main() -> int:
 
             payload = {
                 "created_at": datetime.now().isoformat(timespec="seconds"),
-                "mode": "offline_v1_param_sweep",
+                "mode": f"offline_{model}_param_sweep",
                 "args": vars(args),
                 "batch_root": str(batch_root),
                 "results": [asdict(r) for r in results],
@@ -345,4 +362,5 @@ def main() -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 # python run_batch.py --epochs 100 --grid-json grid_json.json
+# python run_batch.py --model v1_5 --epochs 150 --grid-json grid_json.json --online-test-epoch 10
 # 
