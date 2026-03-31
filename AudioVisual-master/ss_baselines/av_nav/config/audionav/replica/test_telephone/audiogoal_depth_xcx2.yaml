@@ -1,0 +1,16 @@
+BASE_TASK_CONFIG_PATH: "configs/audionav/av_nav/replica/audiogoal_whc.yaml"
+NUM_PROCESSES: 1
+SENSORS: ["DEPTH_SENSOR"]
+TEST_EPISODE_COUNT: 500
+VIDEO_OPTION: []
+VISUALIZATION_OPTION: []
+ENV_NAME: "WhcAudioNavRLEnv"
+TRAINER_NAME: "WhcAVNavTrainer"
+feature_dir: data/sounds/1s_all
+feature_type: 1
+is_TEST: True
+NUM_PROCESSES: 1
+TORCH_GPU_ID: 0
+EVAL:
+  SPLIT: "val_multiple_unheard"
+  USE_CKPT_CONFIG: True

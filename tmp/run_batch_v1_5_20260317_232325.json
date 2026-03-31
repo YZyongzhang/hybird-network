@@ -1,0 +1,200 @@
+{
+  "created_at": "2026-03-18T14:27:43",
+  "mode": "offline_v1_5_param_sweep",
+  "args": {
+    "model": "v1_5",
+    "epochs": 150,
+    "online_test_epoch": 10,
+    "split": "val_multiple",
+    "betas": [
+      0.3,
+      0.5,
+      0.7,
+      1.0
+    ],
+    "actor_lrs": [
+      0.0002
+    ],
+    "critic_lrs": [
+      0.0005
+    ],
+    "alpha_lrs": [
+      0.0001
+    ],
+    "gammas": [
+      0.99
+    ],
+    "taus": [
+      0.005
+    ],
+    "target_entropies": [
+      1.08
+    ],
+    "batch_sizes": [
+      512
+    ],
+    "grid_json": "grid_json.json",
+    "max_runs": 0,
+    "ckpt_root": "media/TRAIN_BATCH_V1_5",
+    "report": "",
+    "stop_on_error": false
+  },
+  "batch_root": "media/TRAIN_BATCH_V1_5/20260317_232325",
+  "results": [
+    {
+      "run_id": "001_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "status": "ok",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.75,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/001_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "error": "",
+      "train_seconds": 6497.202290058136
+    },
+    {
+      "run_id": "002_v1_5_beta0p2_alr2em05_clr5em05_ent1",
+      "status": "ok",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.75,
+        "tau": 0.005,
+        "target_entropy": 1.0,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/002_v1_5_beta0p2_alr2em05_clr5em05_ent1",
+      "error": "",
+      "train_seconds": 6352.489450216293
+    },
+    {
+      "run_id": "003_v1_5_beta0p2_alr2em05_clr5em05_ent0p5",
+      "status": "ok",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.9,
+        "tau": 0.005,
+        "target_entropy": 0.5,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/003_v1_5_beta0p2_alr2em05_clr5em05_ent0p5",
+      "error": "",
+      "train_seconds": 6713.631430387497
+    },
+    {
+      "run_id": "004_v1_5_beta0p2_alr2em05_clr5em05_ent1p08",
+      "status": "ok",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "target_entropy": 1.08,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/004_v1_5_beta0p2_alr2em05_clr5em05_ent1p08",
+      "error": "",
+      "train_seconds": 7426.742800235748
+    },
+    {
+      "run_id": "005_v1_5_beta0p35_alr2em05_clr5em05_ent0p5",
+      "status": "ok",
+      "params": {
+        "beta": 0.35,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.75,
+        "tau": 0.005,
+        "target_entropy": 0.5,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/005_v1_5_beta0p35_alr2em05_clr5em05_ent0p5",
+      "error": "",
+      "train_seconds": 6634.097552537918
+    },
+    {
+      "run_id": "006_v1_5_beta0p35_alr2em05_clr5em05_ent1",
+      "status": "ok",
+      "params": {
+        "beta": 0.35,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.85,
+        "tau": 0.005,
+        "target_entropy": 1.0,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/006_v1_5_beta0p35_alr2em05_clr5em05_ent1",
+      "error": "",
+      "train_seconds": 6665.533099889755
+    },
+    {
+      "run_id": "007_v1_5_beta0p35_alr2em05_clr5em05_ent0p2",
+      "status": "ok",
+      "params": {
+        "beta": 0.35,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.9,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/007_v1_5_beta0p35_alr2em05_clr5em05_ent0p2",
+      "error": "",
+      "train_seconds": 6678.8427584171295
+    },
+    {
+      "run_id": "008_v1_5_beta0p35_alr2em05_clr5em05_ent1p08",
+      "status": "ok",
+      "params": {
+        "beta": 0.35,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "target_entropy": 1.08,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/008_v1_5_beta0p35_alr2em05_clr5em05_ent1p08",
+      "error": "",
+      "train_seconds": 7215.5602469444275
+    },
+    {
+      "run_id": "009_v1_5_beta0p5_alr2em05_clr5em05_ent1p08",
+      "status": "failed",
+      "params": {
+        "beta": 0.5,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.75,
+        "tau": 0.005,
+        "target_entropy": 1.08,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260317_232325/009_v1_5_beta0p5_alr2em05_clr5em05_ent1p08",
+      "error": "",
+      "train_seconds": 0.0
+    }
+  ],
+  "ok_runs": 8,
+  "failed_runs": 1
+}

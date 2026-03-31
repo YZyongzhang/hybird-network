@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
+from network.hybird.semantic_audio import SemanticAudioLoss
 
 NUM_SECTORS = 8
 
@@ -40,7 +41,12 @@ class Train:
         self.optimizer = Adam
 
         self.action_loss_weight = 1.0
-        self.angle_loss_weight = 1.0
+        self.semantic_audio = SemanticAudioLoss(
+            num_sectors=NUM_SECTORS,
+            lambda_classifier=1.0,
+            lambda_classifier_entropy=0.0,
+            lambda_regressor=0.0,
+        )
 
     def _forward(self, batch_audio, batch_rgb, batch_depth):
         return self.train_model.forward_joint(batch_audio, batch_rgb, batch_depth)
@@ -71,21 +77,18 @@ class Train:
                 batch_angle = batch_angle.float().to(self.device)
 
                 action_logits, angle_logits = self._forward(batch_audio, batch_rgb, batch_depth)
-                angle_labels = angle_to_sector_label(batch_angle, num_sectors=NUM_SECTORS)
-
                 loss_action = F.cross_entropy(action_logits, batch_action)
-                loss_angle = F.cross_entropy(angle_logits, angle_labels)
-                loss = (
-                    self.action_loss_weight * loss_action
-                    + self.angle_loss_weight * loss_angle
-                )
+                semantic_out = self.semantic_audio(angle_logits, batch_angle)
+                angle_labels = semantic_out["labels"]
+                loss_angle = semantic_out["classifier_loss"]
+                loss = self.action_loss_weight * loss_action + semantic_out["total_loss"]
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
                 action_pred = action_logits.argmax(dim=1)
-                angle_pred = angle_logits.argmax(dim=1)
+                angle_pred = semantic_out["preds"]
                 batch_size = int(batch_action.shape[0])
                 seen += batch_size
                 correct_action += (action_pred == batch_action).sum().item()
@@ -147,21 +150,18 @@ class Train:
                 batch_angle = batch_angle.float().to(self.device)
 
                 action_logits, angle_logits = self._forward(batch_audio, batch_rgb, batch_depth)
-                angle_labels = angle_to_sector_label(batch_angle, num_sectors=NUM_SECTORS)
-
                 loss_action = F.cross_entropy(action_logits, batch_action)
-                loss_angle = F.cross_entropy(angle_logits, angle_labels)
-                loss = (
-                    self.action_loss_weight * loss_action
-                    + self.angle_loss_weight * loss_angle
-                )
+                semantic_out = self.semantic_audio(angle_logits, batch_angle)
+                angle_labels = semantic_out["labels"]
+                loss_angle = semantic_out["classifier_loss"]
+                loss = self.action_loss_weight * loss_action + semantic_out["total_loss"]
 
                 val_total += loss.item()
                 val_action += loss_action.item()
                 val_angle += loss_angle.item()
 
                 action_pred = action_logits.argmax(dim=1)
-                angle_pred = angle_logits.argmax(dim=1)
+                angle_pred = semantic_out["preds"]
                 batch_size = int(batch_action.shape[0])
                 seen += batch_size
                 correct_action += (action_pred == batch_action).sum().item()

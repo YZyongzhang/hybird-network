@@ -1,0 +1,6 @@
+[
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.60,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.55,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.50,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.45,"tau":0.005,"target_entropy":0.2,"batch_size":512}
+]

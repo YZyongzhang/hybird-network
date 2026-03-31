@@ -15,6 +15,8 @@ import gc
 import importlib.util
 import itertools
 import json
+import re
+import shutil
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -53,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="TRAIN.OFFLINE.online_test_epoch (0 means disable during training)",
     )
-    parser.add_argument("--split", type=str, default="val_multiple", help="dataset split")
+    parser.add_argument("--split", type=str, default="test_multiple_unheard", help="dataset split")
 
     # shared parameter sweeps for v1 / v1_5
     parser.add_argument("--betas", type=float, nargs="+", default=[0.3, 0.5, 0.7, 1.0])
@@ -89,11 +91,62 @@ def _cleanup_cuda() -> None:
         torch.cuda.empty_cache()
 
 
-def _remove_checkpoints(dir_path: Path) -> int:
+def _extract_epoch_from_ckpt_name(ckpt_name: str) -> int | None:
+    import re as _re
+    m = _re.search(r"_(\d+)\.pth$", ckpt_name)
+    if m is None:
+        return None
+    return int(m.group(1))
+
+
+def _save_online_test_checkpoints(
+    run_dir: Path, online_test_epoch: int, total_epochs: int
+) -> Dict[str, int]:
+    online_ckpt_dir = run_dir / "online_test_ckpts"
+    online_ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    if online_test_epoch <= 0:
+        return {"copied": 0, "expected": 0}
+
+    expected_epochs = set(range(online_test_epoch, total_epochs + 1, online_test_epoch))
+    copied = 0
+    copied_epochs = set()
+
+    for ckpt_path in sorted(run_dir.rglob("*.pth")):
+        epoch = _extract_epoch_from_ckpt_name(ckpt_path.name)
+        if epoch is None or epoch not in expected_epochs or epoch in copied_epochs:
+            continue
+        target_name = f"online_test_epoch_{epoch:04d}_{ckpt_path.name}"
+        shutil.copy2(ckpt_path, online_ckpt_dir / target_name)
+        copied += 1
+        copied_epochs.add(epoch)
+
+    with open(online_ckpt_dir / "manifest.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+                "run_dir": str(run_dir),
+                "online_test_epoch": int(online_test_epoch),
+                "total_epochs": int(total_epochs),
+                "expected_epochs": sorted(expected_epochs),
+                "copied_epochs": sorted(copied_epochs),
+                "copied_count": int(copied),
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return {"copied": copied, "expected": len(expected_epochs)}
+
+
+def _remove_checkpoints(dir_path: Path, keep_dir: Path | None = None) -> int:
     if not dir_path.exists():
         return 0
     removed = 0
     for p in dir_path.rglob("*.pth"):
+        if keep_dir is not None and keep_dir in p.parents:
+            continue
         if p.is_file():
             p.unlink()
             removed += 1
@@ -318,7 +371,17 @@ def main() -> int:
             run_module._run_train(cfg, cfg.TASK_CONFIG.TRAIN)
             res.train_seconds = time.time() - t0
 
-            _remove_checkpoints(run_dir)
+            actual_online_test_epoch = int(cfg.TASK_CONFIG.TRAIN.OFFLINE.online_test_epoch)
+            ckpt_save_stats = _save_online_test_checkpoints(
+                run_dir=run_dir,
+                online_test_epoch=actual_online_test_epoch,
+                total_epochs=int(args.epochs),
+            )
+            removed = _remove_checkpoints(run_dir, keep_dir=run_dir / "online_test_ckpts")
+            print(
+                f"[CKPT] saved_online_test={ckpt_save_stats['copied']}/{ckpt_save_stats['expected']} "
+                f"removed_others={removed}"
+            )
             res.status = "ok"
         except Exception as exc:
             res.error = f"{type(exc).__name__}: {exc}"

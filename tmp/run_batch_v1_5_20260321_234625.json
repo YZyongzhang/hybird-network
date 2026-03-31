@@ -1,0 +1,115 @@
+{
+  "created_at": "2026-03-22T06:51:21",
+  "mode": "offline_v1_5_param_sweep",
+  "args": {
+    "model": "v1_5",
+    "epochs": 150,
+    "online_test_epoch": 10,
+    "split": "val_multiple_unheard",
+    "betas": [
+      0.3,
+      0.5,
+      0.7,
+      1.0
+    ],
+    "actor_lrs": [
+      0.0002
+    ],
+    "critic_lrs": [
+      0.0005
+    ],
+    "alpha_lrs": [
+      0.0001
+    ],
+    "gammas": [
+      0.99
+    ],
+    "taus": [
+      0.005
+    ],
+    "target_entropies": [
+      1.08
+    ],
+    "batch_sizes": [
+      512
+    ],
+    "grid_json": "grid_json.json",
+    "max_runs": 0,
+    "ckpt_root": "media/TRAIN_BATCH_V1_5",
+    "report": "",
+    "stop_on_error": false
+  },
+  "batch_root": "media/TRAIN_BATCH_V1_5/20260321_234625",
+  "results": [
+    {
+      "run_id": "001_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "status": "failed",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.4,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260321_234625/001_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "error": "PermissionError: [Errno 1] Operation not permitted",
+      "train_seconds": 6472.203959226608
+    },
+    {
+      "run_id": "002_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "status": "failed",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.3,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260321_234625/002_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "error": "PermissionError: [Errno 1] Operation not permitted",
+      "train_seconds": 6393.1643579006195
+    },
+    {
+      "run_id": "003_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "status": "failed",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.2,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260321_234625/003_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "error": "PermissionError: [Errno 1] Operation not permitted",
+      "train_seconds": 6407.020346403122
+    },
+    {
+      "run_id": "004_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "status": "failed",
+      "params": {
+        "beta": 0.2,
+        "actor_lr": 2e-05,
+        "critic_lr": 5e-05,
+        "alpha_lr": 1e-05,
+        "gamma": 0.1,
+        "tau": 0.005,
+        "target_entropy": 0.2,
+        "batch_size": 512
+      },
+      "run_dir": "media/TRAIN_BATCH_V1_5/20260321_234625/004_v1_5_beta0p2_alr2em05_clr5em05_ent0p2",
+      "error": "PermissionError: [Errno 1] Operation not permitted",
+      "train_seconds": 6221.983085155487
+    }
+  ],
+  "ok_runs": 0,
+  "failed_runs": 4
+}

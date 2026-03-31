@@ -400,6 +400,68 @@ class LoadLmdb:
         if not files:
             raise ValueError(f"No files found from RAW_DATA_PATH={path}")
         return files
+
+    @staticmethod
+    def _normalize_sound_value(v):
+        if hasattr(v, "item"):
+            try:
+                v = v.item()
+            except Exception:
+                pass
+        return v
+
+    @classmethod
+    def _extract_sound_values_per_step(cls, data, num_steps):
+        # Priority 1: explicit top-level sound_id field in pickle
+        if "sound_id" in data:
+            raw = data["sound_id"]
+            if hasattr(raw, "tolist"):
+                raw = raw.tolist()
+            if not isinstance(raw, (list, tuple)):
+                raw = [raw]
+            raw = [cls._normalize_sound_value(x) for x in raw]
+            if len(raw) == num_steps:
+                return raw
+            if len(raw) == 1:
+                return [raw[0]] * num_steps
+
+        # Priority 2: per-step info field
+        infos = data.get("info", [])
+        vals = []
+        if isinstance(infos, (list, tuple)):
+            for info in infos[:num_steps]:
+                sv = None
+                if isinstance(info, dict):
+                    if "current_sound_id" in info:
+                        sv = info["current_sound_id"]
+                    elif "sound_id" in info:
+                        sv = info["sound_id"]
+                    elif "sound" in info:
+                        sv = info["sound"]
+                vals.append(cls._normalize_sound_value(sv))
+        if len(vals) < num_steps:
+            vals.extend([None] * (num_steps - len(vals)))
+        return vals[:num_steps]
+
+    @staticmethod
+    def _encode_sound_values(sound_values, sound_label_to_id):
+        encoded = []
+        for sv in sound_values:
+            if isinstance(sv, (int, np.integer)):
+                encoded.append(int(sv))
+                continue
+            if isinstance(sv, float):
+                encoded.append(int(sv))
+                continue
+            if sv is None:
+                encoded.append(-1)
+                continue
+            key = str(sv)
+            if key not in sound_label_to_id:
+                sound_label_to_id[key] = len(sound_label_to_id)
+            encoded.append(sound_label_to_id[key])
+        return encoded
+
     @classmethod
     def load_pt(cls, path, config):
         files = cls.get_files(path=path)
@@ -408,7 +470,8 @@ class LoadLmdb:
         shard_size = 10000  # 每个 shard 1w 样本
         shard_id = 0
 
-        buffer_rgb, buffer_depth, buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+        sound_label_to_id = {}
 
         for file in tqdm(files):
             tqdm.write(file)
@@ -420,7 +483,11 @@ class LoadLmdb:
 
             action_id = data['action_id']
             action_id = np.array(action_id).reshape(-1).tolist()
-            for v, a  , info in zip(obs[:-1], action_id , data['info']):
+            num_steps = max(0, len(obs) - 1)
+            sound_values = cls._extract_sound_values_per_step(data, num_steps)
+            sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
+
+            for i, (v, a) in enumerate(zip(obs[:-1], action_id)):
                 # if info['distance_to_goal'] > 8.0:
                 #     tqdm.write(f"distence is {info['distance_to_goal']} , drop")
                 #     continue
@@ -430,11 +497,13 @@ class LoadLmdb:
                 
                 action = torch.tensor(a, dtype=torch.long)
                 angel = np.degrees(v['angle'][1])
+                sound_id = torch.tensor(sound_ids[i], dtype=torch.long)
                 buffer_rgb.append(rgb)
                 buffer_depth.append(depth)
                 buffer_audios.append(audio)
                 buffer_actions.append(action)
                 buffer_angles.append(torch.tensor(angel))
+                buffer_sound_ids.append(sound_id)
                 # 写一个 shard
                 if len(buffer_rgb) >= shard_size:
                     torch.save({
@@ -442,12 +511,13 @@ class LoadLmdb:
                         'depth':torch.stack(buffer_depth),
                         'audios': torch.stack(buffer_audios),
                         'actions': torch.stack(buffer_actions),
-                        'angles':torch.stack(buffer_angles)
+                        'angles':torch.stack(buffer_angles),
+                        'sound_ids': torch.stack(buffer_sound_ids),
                     }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
 
                     print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
 
-                    buffer_rgb, buffer_depth , buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
                     shard_id += 1
 
         # 保存最后一个不满 shard 的数据
@@ -457,7 +527,8 @@ class LoadLmdb:
                 'depth':torch.stack(buffer_depth),
                 'audios': torch.stack(buffer_audios),
                 'actions': torch.stack(buffer_actions),
-                'angles':torch.stack(buffer_angles)
+                'angles':torch.stack(buffer_angles),
+                'sound_ids': torch.stack(buffer_sound_ids),
             }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
     
@@ -471,7 +542,8 @@ class LoadLmdb:
         shard_size = 10000  # 每个shard包含的样本数
         shard_id = 0
 
-        buffer_rgb, buffer_depth, buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+        sound_label_to_id = {}
 
         for file in tqdm(files, desc="Loading offline RL data"):
             with open(file, 'rb') as f:
@@ -481,6 +553,9 @@ class LoadLmdb:
             action_id = np.array(data['action_id']).reshape(-1).tolist()
             rewards = np.array(data['reward']).reshape(-1).tolist()
             dones = np.array(data['done']).reshape(-1).tolist() # 取出reset的时候的done。后续要删除这个地方。更改数据收集策略
+            num_steps = max(0, len(obs) - 1)
+            sound_values = cls._extract_sound_values_per_step(data, num_steps)
+            sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
     
             for i in range(len(obs) - 1): # 去除最后没有动作的终态
                 v_now = obs[i]
@@ -508,11 +583,13 @@ class LoadLmdb:
 
                 action = torch.tensor(a, dtype=torch.long)
                 angel = np.degrees(obs[i]['angle'][1])
+                sound_id = torch.tensor(sound_ids[i], dtype=torch.long)
                 buffer_rgb.append(rgb)
                 buffer_depth.append(depth)
                 buffer_audios.append(audio)
                 buffer_actions.append(action)
                 buffer_angles.append(torch.tensor(angel))
+                buffer_sound_ids.append(sound_id)
                 # 写一个 shard
                 if len(buffer_rgb) >= shard_size:
                     torch.save({
@@ -520,12 +597,13 @@ class LoadLmdb:
                         'depth':torch.stack(buffer_depth),
                         'audios': torch.stack(buffer_audios),
                         'actions': torch.stack(buffer_actions),
-                        'angles':torch.stack(buffer_angles)
+                        'angles':torch.stack(buffer_angles),
+                        'sound_ids': torch.stack(buffer_sound_ids),
                     }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
 
                     print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
 
-                    buffer_rgb, buffer_depth , buffer_audios, buffer_actions , buffer_angles = [],[], [], [] , []
+                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
                     shard_id += 1
 
         # 保存最后一个不满 shard 的数据
@@ -535,7 +613,8 @@ class LoadLmdb:
                 'depth':torch.stack(buffer_depth),
                 'audios': torch.stack(buffer_audios),
                 'actions': torch.stack(buffer_actions),
-                'angles':torch.stack(buffer_angles)
+                'angles':torch.stack(buffer_angles),
+                'sound_ids': torch.stack(buffer_sound_ids),
             }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
     @classmethod

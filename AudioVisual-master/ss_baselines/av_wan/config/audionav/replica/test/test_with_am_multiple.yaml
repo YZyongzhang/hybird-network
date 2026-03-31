@@ -1,0 +1,18 @@
+BASE_TASK_CONFIG_PATH: "configs/audionav/av_wan/replica/audiogoal_test_10.yaml"
+NUM_PROCESSES: 1
+SENSORS: ["DEPTH_SENSOR"]
+TEST_EPISODE_COUNT: 500
+
+# VIDEO_OPTION: ["disk"]
+VIDEO_OPTION: []
+# VIDEO_DIR: '/data/AudioVisual/sound-spaces/ss_baselines/av_wan/Demo'
+# VISUALIZE_FAILURE_ONLY: True
+VISUALIZATION_OPTION: []
+ENCODE_DEPTH: False
+USE_SYNC_VECENV: False
+# TRAINER_NAME: "AVWanTrainer"
+# TEST_EPISODE_COUNT: 5000
+# VISUALIZE_FAILURE_ONLY: False
+EVAL:
+  SPLIT: "test_multiple_unheard"
+  USE_CKPT_CONFIG: True

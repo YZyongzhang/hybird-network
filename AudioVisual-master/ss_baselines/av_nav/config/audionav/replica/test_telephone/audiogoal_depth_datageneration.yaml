@@ -1,0 +1,15 @@
+BASE_TASK_CONFIG_PATH: "configs/audionav/av_nav/replica/audiogoal_whc.yaml"
+NUM_PROCESSES: 1
+SENSORS: ["DEPTH_SENSOR"]
+TEST_EPISODE_COUNT: 1000
+VIDEO_OPTION: []
+VISUALIZATION_OPTION: []
+ENV_NAME: "DataGenerationRLEnv"
+TRAINER_NAME: "DataGenerator"
+feature_dir: data/sounds/1s_all
+feature_type: 1
+NUM_PROCESSES: 1
+EVAL:
+  SPLIT: "train_multiple"
+  USE_CKPT_CONFIG: True
+USE_SYNC_VECENV: True

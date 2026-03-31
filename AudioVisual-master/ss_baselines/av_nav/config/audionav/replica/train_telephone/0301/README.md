@@ -1,0 +1,2 @@
+除reg外都已加上buffer+spec
+reg为不分类，直接上direction classifier

@@ -1,6 +1,8 @@
 import torch
 import os
 import random
+import re
+from pathlib import Path
 import torch.nn.functional as F
 
 from configs.default import get_config
@@ -147,29 +149,41 @@ def _run_pt(pt_config):
 
 
 def _run_eval(config, eval_config):
+    sweep_cfg = getattr(eval_config, "CKPT_SWEEP", None)
+    sweep_enable = bool(getattr(sweep_cfg, "ENABLE", getattr(eval_config, "CKPT_SWEEP_ENABLE", False)))
+    if sweep_enable:
+        _run_eval_ckpt_sweep(config, eval_config)
+        logger.info("eval finished")
+        return
+
     logger.info("task=EVAL type=%s", eval_config.TYPE)
     logger.info("eval config: %s", eval_config)
+    _run_eval_once(config, eval_config)
+    logger.info("eval finished")
+
+
+def _run_eval_once(config, eval_config, ckpt_override: str = "", ckpt_field: str = ""):
     if eval_config.TYPE == "OfflineRL_v1_3":
         from tools.eval_hybrid_sac import run_v1_3_eval
 
-        run_v1_3_eval(
+        sac_ckpt = ckpt_override if ckpt_field == "SAC_CKPT" else eval_config.SAC_CKPT
+        return run_v1_3_eval(
             config=config,
             hybrid_ckpt=eval_config.HYBRID_CKPT,
-            sac_ckpt=eval_config.SAC_CKPT,
+            sac_ckpt=sac_ckpt,
             episodes=eval_config.EPISODES,
             max_steps=eval_config.MAX_STEPS,
             seed=eval_config.SEED,
             stochastic_sac=eval_config.STOCHASTIC_SAC,
         )
-        logger.info("eval finished")
-        return
     if eval_config.TYPE == "OfflineRL_v1_5":
         from tools.eval_hybrid_sac import run_v1_5_eval
 
-        run_v1_5_eval(
+        sac_ckpt = ckpt_override if ckpt_field == "SAC_CKPT" else eval_config.SAC_CKPT
+        return run_v1_5_eval(
             config=config,
             hybrid_ckpt=eval_config.HYBRID_CKPT,
-            sac_ckpt=eval_config.SAC_CKPT,
+            sac_ckpt=sac_ckpt,
             episodes=eval_config.EPISODES,
             max_steps=eval_config.MAX_STEPS,
             seed=eval_config.SEED,
@@ -179,13 +193,133 @@ def _run_eval(config, eval_config):
             critic1_ckpt=getattr(eval_config, "CRITIC1_CKPT", ""),
             critic2_ckpt=getattr(eval_config, "CRITIC2_CKPT", ""),
         )
-        logger.info("eval finished")
-        return
     if eval_config.TYPE == "OnlineRL":
-        _run_onlinerl_eval(config, eval_config)
-        logger.info("eval finished")
-        return
+        model_path_override = ckpt_override if ckpt_field == "ONLINE_MODEL_PATH" else ""
+        return _run_onlinerl_eval(config, eval_config, model_path_override=model_path_override)
     raise ValueError(f"Unsupported EVAL.TYPE: {eval_config.TYPE}")
+
+
+def _resolve_ckpt_sweep_field(eval_config, sweep_cfg) -> str:
+    configured = str(getattr(sweep_cfg, "FIELD", "")).strip()
+    if configured:
+        return configured
+    eval_type = str(getattr(eval_config, "TYPE", "")).strip()
+    if eval_type in {"OfflineRL_v1_3", "OfflineRL_v1_5"}:
+        return "SAC_CKPT"
+    if eval_type == "OnlineRL":
+        return "ONLINE_MODEL_PATH"
+    raise ValueError(f"EVAL.CKPT_SWEEP.FIELD is required for EVAL.TYPE={eval_type}")
+
+
+def _extract_eval_spl(eval_result):
+    if eval_result is None:
+        return None
+    if hasattr(eval_result, "avg_spl"):
+        return float(eval_result.avg_spl)
+    if isinstance(eval_result, dict):
+        if "avg_spl" in eval_result:
+            return float(eval_result["avg_spl"])
+        if "spl" in eval_result:
+            return float(eval_result["spl"])
+    if isinstance(eval_result, (tuple, list)) and len(eval_result) >= 2:
+        return float(eval_result[1])
+    return None
+
+
+def _ckpt_sort_key(path_obj: Path, sort_by_epoch: bool):
+    if not sort_by_epoch:
+        return path_obj.name
+    found = re.findall(r"(\d+)", path_obj.stem)
+    epoch = int(found[-1]) if found else -1
+    return (epoch, path_obj.name)
+
+
+def _run_eval_ckpt_sweep(config, eval_config):
+    logger.info("task=EVAL type=%s (ckpt sweep enabled)", eval_config.TYPE)
+    logger.info("eval config: %s", eval_config)
+    sweep_cfg = getattr(eval_config, "CKPT_SWEEP", None)
+    if sweep_cfg is None:
+        raise ValueError("EVAL.CKPT_SWEEP is required when ckpt sweep is enabled.")
+
+    ckpt_dir_str = str(getattr(sweep_cfg, "DIR", "")).strip()
+    if not ckpt_dir_str:
+        raise ValueError("EVAL.CKPT_SWEEP.DIR is required when EVAL.CKPT_SWEEP.ENABLE=True")
+    ckpt_dir = Path(ckpt_dir_str).expanduser()
+    if not ckpt_dir.exists():
+        raise FileNotFoundError(f"EVAL.CKPT_SWEEP.DIR not found: {ckpt_dir}")
+    if not ckpt_dir.is_dir():
+        raise NotADirectoryError(f"EVAL.CKPT_SWEEP.DIR is not a directory: {ckpt_dir}")
+
+    pattern = str(getattr(sweep_cfg, "PATTERN", "*.pth")).strip() or "*.pth"
+    recursive = bool(getattr(sweep_cfg, "RECURSIVE", False))
+    sort_by_epoch = bool(getattr(sweep_cfg, "SORT_BY_EPOCH", True))
+    max_ckpts = int(getattr(sweep_cfg, "MAX_CKPTS", 0))
+    stop_on_error = bool(getattr(sweep_cfg, "STOP_ON_ERROR", False))
+    ckpt_field = _resolve_ckpt_sweep_field(eval_config, sweep_cfg)
+
+    ckpt_iter = ckpt_dir.rglob(pattern) if recursive else ckpt_dir.glob(pattern)
+    ckpt_paths = [p for p in ckpt_iter if p.is_file()]
+    if not ckpt_paths:
+        raise FileNotFoundError(
+            f"No checkpoint matched in {ckpt_dir} with pattern={pattern} recursive={recursive}"
+        )
+    ckpt_paths = sorted(ckpt_paths, key=lambda p: _ckpt_sort_key(p, sort_by_epoch))
+    if max_ckpts > 0:
+        ckpt_paths = ckpt_paths[:max_ckpts]
+
+    logger.info(
+        "[ckpt-sweep] begin: dir=%s pattern=%s recursive=%s field=%s total=%s",
+        str(ckpt_dir),
+        pattern,
+        recursive,
+        ckpt_field,
+        len(ckpt_paths),
+    )
+
+    records = []
+    for idx, ckpt_path in enumerate(ckpt_paths, start=1):
+        ckpt_str = str(ckpt_path)
+        logger.info("[ckpt-sweep] evaluating (%d/%d): %s", idx, len(ckpt_paths), ckpt_str)
+        try:
+            # Use a fresh config per checkpoint to avoid in-place mutations
+            # inside downstream simulator/env code from leaking across sweep rounds.
+            iter_config = config.clone()
+            iter_eval_config = iter_config.TASK_CONFIG.EVAL
+            result = _run_eval_once(
+                iter_config,
+                iter_eval_config,
+                ckpt_override=ckpt_str,
+                ckpt_field=ckpt_field,
+            )
+            spl = _extract_eval_spl(result)
+            if spl is None:
+                raise RuntimeError(f"Cannot parse SPL from eval result for checkpoint: {ckpt_str}")
+            records.append({"ckpt": ckpt_str, "spl": float(spl), "result": result})
+            logger.info("[ckpt-sweep] result ckpt=%s spl=%.6f", ckpt_str, float(spl))
+        except Exception as exc:
+            logger.exception("[ckpt-sweep] failed ckpt=%s error=%s", ckpt_str, exc)
+            if stop_on_error:
+                raise
+
+    if not records:
+        raise RuntimeError("No valid checkpoint evaluation result in ckpt sweep.")
+
+    records_sorted = sorted(records, key=lambda x: x["spl"], reverse=True)
+    best = records_sorted[0]
+    logger.info("[ckpt-sweep] summary begin")
+    for rank, item in enumerate(records_sorted, start=1):
+        logger.info(
+            "[ckpt-sweep] rank=%03d spl=%.6f ckpt=%s",
+            rank,
+            float(item["spl"]),
+            item["ckpt"],
+        )
+    logger.info(
+        "[ckpt-sweep] BEST ckpt=%s spl=%.6f",
+        best["ckpt"],
+        float(best["spl"]),
+    )
+    logger.info("[ckpt-sweep] summary end")
 
 
 def _clone_config_with_dataset_split(config, split_name: str):
@@ -364,11 +498,11 @@ def _get_pose_from_env(env):
         return torch.zeros(7, dtype=torch.float32)
 
 
-def _run_onlinerl_eval(config, eval_config):
+def _run_onlinerl_eval(config, eval_config, model_path_override: str = ""):
     from network import OnlineRLV1, OnlineRLV2
 
     device = _get_device()
-    model_path = str(getattr(eval_config, "ONLINE_MODEL_PATH", "")).strip()
+    model_path = str(model_path_override).strip() if model_path_override else str(getattr(eval_config, "ONLINE_MODEL_PATH", "")).strip()
     if not model_path:
         raise ValueError("EVAL.ONLINE_MODEL_PATH is required when EVAL.TYPE=OnlineRL.")
     if not os.path.exists(model_path):
@@ -527,6 +661,12 @@ def _run_onlinerl_eval(config, eval_config):
         avg_spl,
         avg_distance,
     )
+    return {
+        "avg_reward": float(avg_reward),
+        "avg_spl": float(avg_spl),
+        "avg_distance": float(avg_distance),
+        "episodes": int(episodes),
+    }
 
 
 def _build_offline_agent(config, offline_config):
@@ -794,6 +934,15 @@ def _run_train(config, train_config):
         model = AudioCRNN()
         Train(model=model, trainer=HybirdNetworkAudioTrain, config=train_config)
         logger.info("train finished: HybirdNetworkAudio")
+        return
+
+    if train_config.TYPE == "SemanticAudio":
+        from network.hybird.semantic_audio import SemanticAudioNet
+        from train import SemanticAudioTrain
+
+        model = SemanticAudioNet()
+        Train(model=model, trainer=SemanticAudioTrain, config=train_config)
+        logger.info("train finished: SemanticAudio")
         return
 
     if train_config.TYPE == "HybirdNetwork":

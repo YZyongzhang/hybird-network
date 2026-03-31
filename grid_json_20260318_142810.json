@@ -1,0 +1,21 @@
+[
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.75,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.75,"tau":0.005,"target_entropy":1.0,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.9,"tau":0.005,"target_entropy":0.5,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.99,"tau":0.005,"target_entropy":1.08,"batch_size":512},
+
+  {"beta":0.35,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.75,"tau":0.005,"target_entropy":0.5,"batch_size":512},
+  {"beta":0.35,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.85,"tau":0.005,"target_entropy":1.0,"batch_size":512},
+  {"beta":0.35,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.9,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.35,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.99,"tau":0.005,"target_entropy":1.08,"batch_size":512},
+
+  {"beta":0.5,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.75,"tau":0.005,"target_entropy":1.08,"batch_size":512},
+  {"beta":0.5,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.85,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.5,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.9,"tau":0.005,"target_entropy":0.5,"batch_size":512},
+  {"beta":0.5,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.99,"tau":0.005,"target_entropy":1.0,"batch_size":512},
+
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.85,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.35,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.9,"tau":0.005,"target_entropy":1.0,"batch_size":512},
+  {"beta":0.5,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.99,"tau":0.005,"target_entropy":0.2,"batch_size":512},
+  {"beta":0.2,"actor_lr":0.00002,"critic_lr":0.00005,"alpha_lr":0.00001,"gamma":0.99,"tau":0.005,"target_entropy":0.5,"batch_size":512}
+]

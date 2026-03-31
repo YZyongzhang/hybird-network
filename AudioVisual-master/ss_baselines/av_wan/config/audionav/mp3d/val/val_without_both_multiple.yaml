@@ -1,0 +1,15 @@
+BASE_TASK_CONFIG_PATH: "configs/audionav/av_wan/mp3d/audiogoal_val_without_both_multiple.yaml"
+NUM_PROCESSES: 1
+SENSORS: ["DEPTH_SENSOR"]
+TEST_EPISODE_COUNT: 500
+VIDEO_OPTION: []
+VISUALIZATION_OPTION: []
+USE_SYNC_VECENV: False
+SIMULATOR_GPU_ID: 1
+TORCH_GPU_ID: 1
+TRAINER_NAME: "WhcAVWanTrainer"
+ENV_NAME: "WhcMapNavEnv"
+SOURCE_SOUND_IDS_PATH: "data/sounds/sound_ids_1s_all_not_merge_train.npy"
+EVAL:
+  SPLIT: "val_multiple_unheard"
+  USE_CKPT_CONFIG: True

@@ -1,0 +1,12 @@
+BASE_TASK_CONFIG_PATH: "configs/audionav/av_wan/replica/audiogoal_val_10.yaml"
+NUM_PROCESSES: 1
+SENSORS: ["DEPTH_SENSOR"]
+TEST_EPISODE_COUNT: 500
+VIDEO_OPTION: []
+VISUALIZATION_OPTION: []
+ENCODE_DEPTH: False
+SIMULATOR_GPU_ID: 3
+TORCH_GPU_ID: 3
+EVAL:
+  SPLIT: "val_multiple_unheard"
+  USE_CKPT_CONFIG: True

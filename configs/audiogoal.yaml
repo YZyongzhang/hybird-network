@@ -66,15 +66,15 @@ COLLECT:
   COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
-  OPEN: False
-  TYPE: "offlinesequence"
+  OPEN: True
+  TYPE: "HybirdNetwork"
   RAW_DATA_PATH: 
-    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
-    - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    # - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-    - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/mass_offline_data_no_reward_rescale_sequence_with_spl_17"
+    # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  TO_PATH: "media/pt/semantic_audio_hybrid"
   CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   SHARD_SIZE: 10000
   # SEQ_LEN: 5
@@ -119,7 +119,7 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/mass_offline_data_no_reward_rescale_sequence_with_spl_17"
+      - "media/pt/mass_offline_data_reward_rescale_sequence"
     ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
     RANDOM_SHARD_RELOAD: True
@@ -132,7 +132,7 @@ TRAIN:
 
     replay_epoch: 1000
     log_interval: 1
-    online_test_epoch: 1
+    online_test_epoch: 5 # 不对onlinetest
     batch_size: 512
     num_epochs: 150
 
@@ -143,13 +143,13 @@ TRAIN:
     actor_lr: 0.00002
     critic_lr: 0.00005
     alpha_lr: 0.00001
-    target_entropy: 1.08
+    target_entropy: 0.2
     log_alpha_min: -10.0
     log_alpha_max: 2.0
     tau: 0.005
-    beta: 0.5
+    beta: 0.01
     # gamma: 0.99
-    gamma: 0.75 
+    gamma: 0.70
     lstm_hidden_dim: 256
     lstm_num_layers: 1
     lstm_seq_len: 5
@@ -262,17 +262,17 @@ TRAIN:
       online_eval_enable: True
       online_eval_hybrid_ckpt: "media/HYBRID/20260307_235109/model_epoch_301.pth"
       online_eval_every: 1
-      online_eval_episodes: 16
+      online_eval_episodes: 50
       online_eval_max_steps: 200
       online_eval_greedy: True
-      online_eval_split: "val_multiple"
+      online_eval_split: "val_multiple_unheard"
       online_eval_log_every: 0
 
 EVAL:
-  OPEN: True
+  OPEN: False
   TYPE: "OfflineRL_v1_5"  # OfflineRL_v1_3 | OfflineRL_v1_5 | OnlineRL
   HYBRID_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
-  SAC_CKPT: "media/TRAIN/20260316_214254/sac_2level_model_79.pth"
+  SAC_CKPT: "media/TRAIN/20260312_232051/sac_2level_model_83.pth"
   EPISODES: 0
   MAX_STEPS: 200
   SEED: 0
@@ -282,7 +282,7 @@ EVAL:
   ONLINE_MODEL_PATH: "media/ONLINE/20260304_112625/onlinerl_epoch_2310.pth"
   ONLINE_GREEDY: False
   ONLINE_LOG_EVERY: 1
-  ONLINE_DATASET_SPLIT: "val_multiple"
+  ONLINE_DATASET_SPLIT: "val_multiple_unheard"
   # Optional for v1_5 separate-weight eval
   TEMPORAL_CKPT: ""
   ACTOR_CKPT: ""
@@ -291,14 +291,28 @@ EVAL:
   # DORL eval (train/eval_dorl.py)
   DORL_MODEL_PATH: "media/DORL/ckpt/dorl_sac_epoch_30.pth"
   DORL_HYBRID_CKPT: "artifacts/experiments/heard_unheard/heard/hybird_ckpt/model_epoch_100.pth"
-  DORL_DATASET_SPLIT: "val_multiple"
+  DORL_DATASET_SPLIT: "val_multiple_unheard"
   DORL_GREEDY: True
   DORL_LOG_EVERY: 1
 
+  # Sweep checkpoints in a folder and pick the best one by SPL.
+  CKPT_SWEEP:
+    ENABLE: False
+    # For OfflineRL_v1_3/v1_5 keep default "SAC_CKPT"; for OnlineRL use "ONLINE_MODEL_PATH".
+    FIELD: "SAC_CKPT"
+    DIR: "media/TRAIN_BATCH_V1_5/20260322_140934/004_v1_5_beta0p5_alr2em05_clr5em05_ent0p8/20260322_193725/"
+    PATTERN: "*.pth"
+    RECURSIVE: False
+    SORT_BY_EPOCH: True
+    # 0 means evaluate all matched checkpoints.
+    MAX_CKPTS: 0
+    # False: continue when a ckpt fails; True: stop immediately.
+    STOP_ON_ERROR: False
+
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_multiple"
+  SPLIT: "test_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_sample_50.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"
