@@ -79,7 +79,7 @@ class Finnal_model(nn.Module):
             nn.Linear(self.hidden_dim, 128),
             nn.ReLU(),
             nn.LayerNorm(128),
-            nn.Linear(128, 4)
+            nn.Linear(128, 2)
         )
 
     def forward(self,encoder):
@@ -117,8 +117,7 @@ class Network(nn.Module):
         audio, rgbd = self._prepare_inputs(audio, rgb, depth)
         audio = (audio - audio.mean()) / (audio.std() + 1e-6)
         
-        with torch.no_grad():
-            audio_encoder = self.audio_encoder.encoder_forward(audio)
+        audio_encoder = self.audio_encoder.encoder_forward(audio)
         visual_cnn = self.visual_encoder(rgbd)
         v_batch , v_dim , v_h , v_w = visual_cnn.shape
         visual_cnn = visual_cnn.reshape(v_batch , v_h * v_w  , v_dim)

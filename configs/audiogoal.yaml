@@ -43,7 +43,7 @@ TASK:
 COLLECT:
   OPEN: False
   GRID_SIZE: 1.0
-  TYPE: "collided"
+  TYPE: "greedy"
   # TYPE 可选新增: "offlineRL_v1_5"
   # 当 TYPE=offlineRL_v1_5 时:
   # - COLLECT_CKPT: hybrid/foundation 模型权重
@@ -66,18 +66,19 @@ COLLECT:
   COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
-  OPEN: True
-  TYPE: "HybirdNetwork"
+  OPEN: False
+  TYPE: "offlineoneframe"
   RAW_DATA_PATH: 
-    # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-    # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
-    # - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-    # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/semantic_audio_hybrid"
-  CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
+    - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  TO_PATH: "media/pt/offline_way_point_hybrid_model_sequnce"
+  # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
+  CKPT: "PR/heard/ckpt/20260413_195457/model_epoch_100.pth"
   SHARD_SIZE: 10000
-  # SEQ_LEN: 5
+  SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
   # Reward shaping for PT production
   REWARD_SCALE_ENABLE: False
@@ -92,7 +93,7 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   # 一级分支（TRAIN.TYPE）:
   # - HybirdNetwork / HybirdNetworkAudio
   # - OfflineRL -> 使用 TRAIN.OFFLINE
@@ -105,8 +106,8 @@ TRAIN:
   # Used only when TYPE is HybirdNetwork/HybirdNetworkAudio
   EPOCH: 100
   BATCH_SIZE: 128
-  train_shard_pattern: ["/hdd-data3/hybird/hybird(heard_train_multiple)/foundation_model_shard_0.pt"]
-  val_shard_pattern: ["/hdd-data3/hybird/hybird(val_multiple_heard)/foundation_model_shard_0.pt"]
+  train_shard_pattern: ["media/pt/way_point/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["media/pt/way_point_val/foundation_model_shard_*.pt"]
 
   OFFLINE:
     TYPE: "OfflineRL"
@@ -119,8 +120,8 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/mass_offline_data_reward_rescale_sequence"
-    ONLINE_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
+      - "media/pt/offline_way_point_hybrid_model_sequnce"
+    ONLINE_CKPT: "PR/heard/ckpt/20260413_195457/model_epoch_100.pth"
 
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 55
@@ -133,6 +134,7 @@ TRAIN:
     replay_epoch: 1000
     log_interval: 1
     online_test_epoch: 5 # 不对onlinetest
+    online_test_frame_mode: "twoframe"
     batch_size: 512
     num_epochs: 150
 
@@ -311,7 +313,7 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "test_multiple"
+  SPLIT: "val_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"

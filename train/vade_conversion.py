@@ -1006,7 +1006,6 @@ class LoadLmdb:
                 r = rewards[i]
                 d = dones[i]
 
-                # 提取特征
                 rgb_now = torch.from_numpy(v_now['rgb']).float() / 255.0
                 depth_now = torch.from_numpy(v_now['depth']).float() 
                 audio_now = torch.from_numpy(v_now['spectrogram'][0]).float()
@@ -1014,7 +1013,6 @@ class LoadLmdb:
                 depth_next = torch.from_numpy(v_next['depth']).float()
                 audio_next = torch.from_numpy(v_next['spectrogram'][0]).float()
                 if i == 0:
-                    # 如果是第一个step ， 则在前面填充0
                     pre_rgb = torch.zeros_like(rgb_now)
                     pre_depth = torch.zeros_like(depth_now)
                     
@@ -1114,6 +1112,228 @@ class LoadLmdb:
             "shard_size": shard_size,
             "embed_batch_size": embed_batch_size,
         }
+
+    @classmethod
+    def load_offline_one_frame(cls, path, model, config, seq_len=5):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.TO_PATH, exist_ok=True)
+
+        seq_len = int(getattr(config, "SEQ_LEN", seq_len))
+        shard_size = int(getattr(config, "SHARD_SIZE", 2000))
+        device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        shard_id = 0
+        total_samples = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        def flush_shard():
+            nonlocal shard_id, total_samples
+            if not buffer_states:
+                return
+            shard_path = os.path.join(config.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save(
+                {
+                    "states": torch.stack(buffer_states),
+                    "next_states": torch.stack(buffer_next_states),
+                    "actions": torch.stack(buffer_actions),
+                    "rewards": torch.stack(buffer_rewards),
+                    "dones": torch.stack(buffer_dones),
+                },
+                shard_path,
+            )
+            print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+            total_samples += len(buffer_states)
+            shard_id += 1
+            buffer_states.clear()
+            buffer_next_states.clear()
+            buffer_actions.clear()
+            buffer_rewards.clear()
+            buffer_dones.clear()
+
+        for file in tqdm(files, desc="Loading offline RL data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
+
+            encoded_states = []
+            with torch.no_grad():
+                for v in obs:
+                    rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                    depth = torch.from_numpy(v['depth']).float()
+                    audio = torch.from_numpy(v['spectrogram'][0]).float()
+                    state = model.embedding_forward(
+                        audio.unsqueeze(0).to(device),
+                        rgb.unsqueeze(0).to(device),
+                        depth.unsqueeze(0).to(device)
+                    )
+                    encoded_states.append(state.squeeze(0).cpu())
+
+            traj_len = len(encoded_states)
+            limit = min(len(action_id), len(rewards), len(dones), traj_len - 1)
+            for i in range(max(0, limit - seq_len + 1)):
+                state_seq = torch.stack(encoded_states[i:i+seq_len])
+                next_state_seq = torch.stack(encoded_states[i+1:i+1+seq_len])
+                a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
+                r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
+                d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
+                buffer_states.append(state_seq)
+                buffer_next_states.append(next_state_seq)
+                buffer_actions.append(a_seq)
+                buffer_rewards.append(r_seq)
+                buffer_dones.append(d_seq)
+                if len(buffer_states) >= shard_size:
+                    flush_shard()
+
+        flush_shard()
+        print(f"PT 写入完成，总样本数: {total_samples}, 输出目录: {config.TO_PATH}")
+        return {
+            "output_dir": config.TO_PATH,
+            "total_samples": total_samples,
+            "num_shards": shard_id,
+            "shard_size": shard_size,
+            "seq_len": seq_len,
+        }
+    @staticmethod
+    def _extract_turn_waypoints(action_id, path_points, start_point, stop_action_id=0):
+        actions = [int(a) for a in action_id]
+        if len(path_points) < len(actions) + 1:
+            return []
+
+        turn_action_ids = {2, 3}
+        waypoints = []
+        previous_waypoint = np.asarray(start_point, dtype=np.float32)
+        prev_idx = None
+        for idx, action in enumerate(actions):
+            if action == stop_action_id:
+                stop_point = np.asarray(path_points[idx], dtype=np.float32)
+                if not np.allclose(stop_point, previous_waypoint):
+                    waypoints.append((stop_point, previous_waypoint.copy()))
+                break
+            if action not in turn_action_ids:
+                continue
+            if idx == 0:
+                prev_idx = idx
+                continue
+            if prev_idx is not None and idx == prev_idx + 1 and actions[prev_idx] == action:
+                continue
+            turn_point = np.asarray(path_points[idx], dtype=np.float32)
+            if not np.allclose(turn_point, previous_waypoint):
+                waypoints.append((turn_point, previous_waypoint.copy()))
+                previous_waypoint = turn_point
+            prev_idx = idx
+        return waypoints
+
+    @staticmethod
+    def _point_to_polar(current_point, reference_point):
+        delta = np.asarray(current_point, dtype=np.float32) - np.asarray(reference_point, dtype=np.float32)
+        x = float(delta[0])
+        z = float(delta[2]) if delta.shape[0] >= 3 else float(delta[-1])
+        radius = float(np.sqrt(x * x + z * z))
+        theta = float(np.arctan2(z, x))
+        return torch.tensor([radius, theta], dtype=torch.float32)
+
+    @classmethod
+    def load_pt_waypoint_polar(cls, path, config):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+        os.makedirs(config.TO_PATH, exist_ok=True)
+        shard_size = int(getattr(config, "SHARD_SIZE", 10000))
+        shard_id = 0
+
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+        sound_label_to_id = {}
+        stop_action_id = int(getattr(config, "STOP_ACTION_ID", 0))
+
+        for file in tqdm(files, desc="Loading waypoint polar PT"):
+            with open(file, "rb") as f:
+                data = pickle.load(f)
+            
+            obs = data["obs"]
+            action_id = np.array(data["action_id"]).reshape(-1).tolist()
+            num_steps = max(0, len(obs) - 1)
+            if num_steps <= 0:
+                continue
+
+            path_points = data.get("path_point", [])
+            
+            if len(path_points) == 1 and isinstance(path_points[0], (list, tuple, np.ndarray)):
+                first_item = path_points[0]
+                if len(first_item) > 0 and isinstance(first_item[0], (list, tuple, np.ndarray)):
+                    path_points = first_item
+            if len(path_points) < num_steps + 1:
+                continue
+
+            sound_values = cls._extract_sound_values_per_step(data, num_steps)
+            sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
+            start_point = np.asarray(path_points[0], dtype=np.float32)
+            turn_waypoints = cls._extract_turn_waypoints(
+                action_id=action_id[:num_steps],
+                path_points=path_points,
+                start_point=start_point,
+                stop_action_id=stop_action_id,
+            )
+            if not turn_waypoints:
+                continue
+
+            waypoint_idx = 0
+            current_waypoint, waypoint_reference = turn_waypoints[waypoint_idx]
+
+            for i, v in enumerate(obs[:-1]):
+                current_point = np.asarray(path_points[i], dtype=np.float32)
+                while waypoint_idx + 1 < len(turn_waypoints) and np.allclose(current_point, current_waypoint):
+                    waypoint_idx += 1
+                    current_waypoint, waypoint_reference = turn_waypoints[waypoint_idx]
+
+                rgb = torch.from_numpy(v["rgb"]).float() / 255.0
+                depth = torch.from_numpy(v["depth"]).float()
+                audio = torch.from_numpy(v["spectrogram"][0]).float()
+                polar_action = cls._point_to_polar(current_waypoint, waypoint_reference)
+                angel = np.degrees(v["angle"][1])
+                sound_id = torch.tensor(sound_ids[i], dtype=torch.long)
+
+                buffer_rgb.append(rgb)
+                buffer_depth.append(depth)
+                buffer_audios.append(audio)
+                buffer_actions.append(polar_action)
+                buffer_angles.append(torch.tensor(angel))
+                buffer_sound_ids.append(sound_id)
+
+                if len(buffer_rgb) >= shard_size:
+                    torch.save({
+                        "rgb": torch.stack(buffer_rgb),
+                        "depth": torch.stack(buffer_depth),
+                        "audios": torch.stack(buffer_audios),
+                        "actions": torch.stack(buffer_actions),
+                        "angles": torch.stack(buffer_angles),
+                        "sound_ids": torch.stack(buffer_sound_ids),
+                    }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+                    print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+                    shard_id += 1
+
+        if buffer_rgb:
+            torch.save({
+                "rgb": torch.stack(buffer_rgb),
+                "depth": torch.stack(buffer_depth),
+                "audios": torch.stack(buffer_audios),
+                "actions": torch.stack(buffer_actions),
+                "angles": torch.stack(buffer_angles),
+                "sound_ids": torch.stack(buffer_sound_ids),
+            }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+            print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+
     @classmethod
     def load_offline_with_hybrid(cls, path, config):
         files = cls.get_files(path=path)

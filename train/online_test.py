@@ -368,13 +368,13 @@ class OnlineTest:
                     rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
                     depth = torch.from_numpy(obs["depth"]).float()
                     audio = self._get_audio_tensor(obs)
-                    if pre_rgb is None:
-                        pre_rgb = torch.zeros_like(rgb)
-                        pre_depth = torch.zeros_like(depth)
-                    trgb = torch.cat([pre_rgb, rgb], dim=2)
-                    tdepth = torch.cat([pre_depth, depth], dim=2)
+                    # if pre_rgb is None:
+                    #     pre_rgb = torch.zeros_like(rgb)
+                    #     pre_depth = torch.zeros_like(depth)
+                    # trgb = torch.cat([pre_rgb, rgb], dim=2)
+                    # tdepth = torch.cat([pre_depth, depth], dim=2)
                     state = self.hybirdmodel.embedding_forward(
-                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
+                        audio.to(self.device), rgb.to(self.device), depth.to(self.device)
                     ).detach().cpu()
                     state_queue.append(state)
 
@@ -382,13 +382,13 @@ class OnlineTest:
                         state_queue.appendleft(torch.zeros_like(state))
                     seq_state = torch.stack(list(state_queue), dim=0).unsqueeze(0)
                     action_sac = self._to_env_action(sac_model.get_action(seq_state.to(self.device), eval=True))
-                    action_hybird = int(
-                        self.hybirdmodel(audio.to(self.device), trgb.to(self.device), tdepth.to(self.device))
-                        .argmax(dim=1)
-                        .item()
-                    )
-                    pre_rgb = rgb
-                    pre_depth = depth
+                    # action_hybird = int(
+                    #     self.hybirdmodel(audio.to(self.device), trgb.to(self.device), tdepth.to(self.device))
+                    #     .argmax(dim=1)
+                    #     .item()
+                    # )
+                    # pre_rgb = rgb
+                    # pre_depth = depth
 
                 obs, reward, done, info = self.env.step(action=action_sac)
                 logger.info(
@@ -497,22 +497,25 @@ class OnlineTest:
 
 
     def rollout(self , epoch , sac_model , logger):
-        if self.config.model == "v1":
-            return self.rollout_two_frame(epoch , sac_model , logger)
-        elif self.config.model in ("v1_3", "v1_4"):
-            return self.rollout_hybrid_offline(epoch , sac_model , logger)
-        elif self.config.model == 'v2':
-            return self.rollout_two_frame(epoch , sac_model , logger)
-        elif self.config.model == 'v4':
-            return self.rollout_lstm(epoch , sac_model , logger)
-        elif self.config.model == 'v5':
-            return self.rollout_lstm_attention(epoch , sac_model , logger)
-        elif self.config.model == 'v1_5':
-            return self.rollout_lstm_v15(epoch, sac_model, logger)
-        elif self.config.model == 'v1_8':
-            return self.rollout_transformer_v1_8(epoch, sac_model, logger)
-        elif self.config.model == 'v1_6':
-            logger.warning("online test model v1_6 is deprecated; using v1_8 rollout.")
-            return self.rollout_transformer_v1_8(epoch, sac_model, logger)
-        raise ValueError(f"Unsupported online test model: {self.config.model}")
+        frame_mode = getattr(self.config, "online_test_frame_mode", "twoframe")
+        if frame_mode == "oneframe":
+            return self.rollout_1(epoch, sac_model, logger)
+        if frame_mode == "twoframe":
+            if self.config.model in ("v1", "v2"):
+                return self.rollout_two_frame(epoch , sac_model , logger)
+            elif self.config.model in ("v1_3", "v1_4"):
+                return self.rollout_hybrid_offline(epoch , sac_model , logger)
+            elif self.config.model == 'v4':
+                return self.rollout_lstm(epoch , sac_model , logger)
+            elif self.config.model == 'v5':
+                return self.rollout_lstm_attention(epoch , sac_model , logger)
+            elif self.config.model == 'v1_5':
+                return self.rollout_lstm_v15(epoch, sac_model, logger)
+            elif self.config.model == 'v1_8':
+                return self.rollout_transformer_v1_8(epoch, sac_model, logger)
+            elif self.config.model == 'v1_6':
+                logger.warning("online test model v1_6 is deprecated; using v1_8 rollout.")
+                return self.rollout_transformer_v1_8(epoch, sac_model, logger)
+            raise ValueError(f"Unsupported online test model: {self.config.model}")
+        raise ValueError(f"Unsupported online test frame mode: {frame_mode}")
     

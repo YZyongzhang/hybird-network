@@ -117,6 +117,9 @@ def _run_pt(pt_config):
     if pt_config.TYPE == "HybirdNetwork":
         LoadLmdb.load_pt(pt_config.RAW_DATA_PATH, pt_config)
         return
+    if pt_config.TYPE == "WaypointPolarPT":
+        LoadLmdb.load_pt_waypoint_polar(pt_config.RAW_DATA_PATH, pt_config)
+        return
     if pt_config.TYPE == "OfflineWithHybridPT":
         LoadLmdb.load_offline_with_hybrid(pt_config.RAW_DATA_PATH, config=pt_config)
         return
@@ -129,6 +132,7 @@ def _run_pt(pt_config):
         "OfflineTwoFrameWithHybridPT": "load_offline_two_frame",
         "offline": "load_offline",
         "offlinetwoframe": "load_offline_two_frame",
+        "offlineoneframe": "load_offline_one_frame",
         "offlinelstm": "load_offline_lstm",
         "offlinelstm_v15": "load_offline_lstm_v15",
         "offlinetransformer_v16": "load_offline_lstm_v15",

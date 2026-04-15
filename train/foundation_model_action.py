@@ -9,8 +9,6 @@ from utils.log import logger
 import numpy as np
 import math
 import pickle
-NUM_SECTORS = 8
-SECTOR_ANGLE = 2 * 180 / NUM_SECTORS  # 每个扇区角度
 class Train:
     def __init__(self, model, Adam, train_loader,val_loader, epoch, writer, save_dir ,train_size , val_size, device='cuda'):
         self.train_model = model.to(device)
@@ -32,28 +30,26 @@ class Train:
             local_step = 0
             epoch_angle_loss = 0.0
             for batch in self.train_loader:
-
                 batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
 
                 batch_audio  , batch_rgb ,batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
-                batch_action = batch_action.long()
+                batch_action = batch_action.float()
 
-                
                 action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
-                loss_action = F.cross_entropy(action_predict , batch_action)
+                loss_action = F.mse_loss(action_predict, batch_action)
+                radius_mae = torch.mean(torch.abs(action_predict[:, 0] - batch_action[:, 0]))
+                theta_mae = torch.mean(torch.abs(action_predict[:, 1] - batch_action[:, 1]))
                 self.optimizer.zero_grad()
                 loss_action.backward()
                 self.optimizer.step()
-                preds = action_predict.argmax(dim=1)
 
-                
-                correct = (preds == batch_action).sum() / batch_angle.shape[0]
-                print(f"Epoch {ep}, Step {global_step} , action loss {loss_action:.6f}")
+                print(f"Epoch {ep}, Step {global_step} , polar loss {loss_action:.6f}")
                 epoch_angle_loss += loss_action.item()
 
                 if self.writer:
-                    self.writer.add_scalar("Loss/step_action", loss_action.item(), global_step)
-                    self.writer.add_scalar("Loss/step_acc" , correct , global_step)
+                    self.writer.add_scalar("Loss/step_polar", loss_action.item(), global_step)
+                    self.writer.add_scalar("Loss/step_radius_mae" , radius_mae.item() , global_step)
+                    self.writer.add_scalar("Loss/step_theta_mae" , theta_mae.item() , global_step)
                 global_step += 1
                 local_step += 1
 
@@ -64,8 +60,8 @@ class Train:
 
             avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
-                self.writer.add_scalar("Loss/epoch_action", avg_angle_loss, ep)
-            print(f"Epoch {ep+1} finished, average action loss: {avg_angle_loss:.4f}")
+                self.writer.add_scalar("Loss/epoch_polar", avg_angle_loss, ep)
+            print(f"Epoch {ep+1} finished, average polar loss: {avg_angle_loss:.4f}")
             if (ep + 1) % 1 == 0:
                 save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
@@ -74,28 +70,30 @@ class Train:
     def validate(self, step):
         self.train_model.eval()
         val_action_loss = 0.0
-        total_acc = 0.0
-        correct = 0
+        val_radius_mae = 0.0
+        val_theta_mae = 0.0
         with torch.no_grad():
 
             for batch in self.val_loader:
                 batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action = batch
                 batch_audio  , batch_rgb , batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
-                batch_action = batch_action.long()
+                batch_action = batch_action.float()
 
                 action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
-                action_loss = F.cross_entropy(action_predict , batch_action)
+                action_loss = F.mse_loss(action_predict, batch_action)
+                radius_mae = torch.mean(torch.abs(action_predict[:, 0] - batch_action[:, 0]))
+                theta_mae = torch.mean(torch.abs(action_predict[:, 1] - batch_action[:, 1]))
                 
                 val_action_loss += action_loss.item()
-                preds = action_predict.argmax(dim=1)  # [batch]
-
-                correct += (preds == batch_action).sum().item()
-
+                val_radius_mae += radius_mae.item()
+                val_theta_mae += theta_mae.item()
 
         avg_action_loss = val_action_loss / len(self.val_loader)
-        total_acc = correct / self.val_size
+        avg_radius_mae = val_radius_mae / len(self.val_loader)
+        avg_theta_mae = val_theta_mae / len(self.val_loader)
         if self.writer:
-            self.writer.add_scalar("Val/action_loss", avg_action_loss, step)
-            self.writer.add_scalar("Val/acc", total_acc, step)
+            self.writer.add_scalar("Val/polar_loss", avg_action_loss, step)
+            self.writer.add_scalar("Val/radius_mae", avg_radius_mae, step)
+            self.writer.add_scalar("Val/theta_mae", avg_theta_mae, step)
         self.train_model.train()
 
