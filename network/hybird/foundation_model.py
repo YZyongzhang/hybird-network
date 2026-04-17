@@ -75,18 +75,25 @@ class Finnal_model(nn.Module):
             nn.LayerNorm(hidden_dim),
         )
         
-        self.fc2 = nn.Sequential(
+        self.polar_head = nn.Sequential(
             nn.Linear(self.hidden_dim, 128),
             nn.ReLU(),
             nn.LayerNorm(128),
             nn.Linear(128, 2)
         )
+        self.action_head = nn.Sequential(
+            nn.Linear(self.hidden_dim, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Linear(128, output_dim)
+        )
 
     def forward(self,encoder):
         x1 = self.fc1(encoder)
         x2 = self.dropout(x1)
-        x3 = self.fc2(x2)
-        return x3
+        polar = self.polar_head(x2)
+        action_logits = self.action_head(x2)
+        return polar, action_logits
 
 class Network(nn.Module):
     def __init__(self):
@@ -133,8 +140,10 @@ class Network(nn.Module):
 
     def forward(self,audio , rgb , depth):
         embedding = self._action_embedding(audio, rgb, depth)
-        action_logits = self.final.fc2(self.final.dropout(embedding))
-        return action_logits
+        dropped = self.final.dropout(embedding)
+        polar_predict = self.final.polar_head(dropped)
+        action_logits = self.final.action_head(dropped)
+        return polar_predict, action_logits
 
     def forward_joint(self, audio, rgb, depth):
         """
@@ -142,9 +151,9 @@ class Network(nn.Module):
         - action_logits: from AV fusion branch
         - angle_logits: from audio encoder head (8 sectors)
         """
-        embedding = self._action_embedding(audio, rgb, depth)
-        dropped = self.final.dropout(embedding)
-        action_logits = self.final.fc2(dropped)
+        _, action_logits = self.forward(audio, rgb, depth)
+        if len(audio.shape) == 3:
+            audio = audio.unsqueeze(0)
         angle_logits = self.audio_encoder(audio)
         return action_logits, angle_logits
     
@@ -181,7 +190,7 @@ class Network(nn.Module):
         p_share_encoder = self.add_position(share_visual_audio_encoder)
         share_encoder = share_visual_audio_encoder + p_share_encoder
         embedding = self.final.fc1(share_encoder)
-        embedding = self.final.fc2[0](embedding)
+        embedding = self.final.polar_head[0](embedding)
         embedding = embedding.squeeze(0)
         audio_encoder = audio_encoder.squeeze(0)
         return audio_encoder , embedding

@@ -1,6 +1,5 @@
 ENVIRONMENT:
   MAX_EPISODE_STEPS: 200
-
 SIMULATOR:
   HABITAT_SIM_V0:
     GPU_DEVICE_ID: 0
@@ -74,9 +73,9 @@ PT:
     - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
     - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/offline_way_point_hybrid_model_sequnce"
+  TO_PATH: "media/pt/way_point_val"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
-  CKPT: "PR/heard/ckpt/20260413_195457/model_epoch_100.pth"
+  CKPT: "PR/heard/ckpt/20260415_104330/model_epoch_100.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
@@ -104,7 +103,7 @@ TRAIN:
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
   # Used only when TYPE is HybirdNetwork/HybirdNetworkAudio
-  EPOCH: 100
+  EPOCH: 300
   BATCH_SIZE: 128
   train_shard_pattern: ["media/pt/way_point/foundation_model_shard_*.pt"]
   val_shard_pattern: ["media/pt/way_point_val/foundation_model_shard_*.pt"]
@@ -120,8 +119,8 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/offline_way_point_hybrid_model_sequnce"
-    ONLINE_CKPT: "PR/heard/ckpt/20260413_195457/model_epoch_100.pth"
+      - "media/pt/offline_way_point"
+    ONLINE_CKPT: "PR/heard/ckpt/20260415_104330/model_epoch_100.pth"
 
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 55
@@ -151,7 +150,7 @@ TRAIN:
     tau: 0.005
     beta: 0.01
     # gamma: 0.99
-    gamma: 0.70
+    gamma: 0.75
     lstm_hidden_dim: 256
     lstm_num_layers: 1
     lstm_seq_len: 5

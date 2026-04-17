@@ -241,6 +241,7 @@ def get_task_config(
         config_paths: Optional[Union[List[str], str]] = None,
         opts: Optional[list] = None
 ) -> habitat.Config:
+    import pdb;pdb.set_trace()
     config = _TC.clone()
     if config_paths:
         if isinstance(config_paths, str):
@@ -250,6 +251,7 @@ def get_task_config(
                 config_paths = [config_paths]
 
         for config_path in config_paths:
+            import pdb;pdb.set_trace()
             config.merge_from_file(config_path)
 
     if opts:

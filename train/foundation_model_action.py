@@ -30,24 +30,31 @@ class Train:
             local_step = 0
             epoch_angle_loss = 0.0
             for batch in self.train_loader:
-                batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action = batch
+                batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action, batch_action_id = batch
 
-                batch_audio  , batch_rgb ,batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
-                batch_action = batch_action.float()
+                batch_audio  , batch_rgb ,batch_depth = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device)
+                batch_action = batch_action.to(self.device).float()
+                batch_action_id = batch_action_id.to(self.device).long()
 
-                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
-                loss_action = F.mse_loss(action_predict, batch_action)
-                radius_mae = torch.mean(torch.abs(action_predict[:, 0] - batch_action[:, 0]))
-                theta_mae = torch.mean(torch.abs(action_predict[:, 1] - batch_action[:, 1]))
+                polar_predict, action_logits = self.train_model(batch_audio , batch_rgb , batch_depth)
+                loss_polar = F.mse_loss(polar_predict, batch_action)
+                loss_action = F.cross_entropy(action_logits, batch_action_id)
+                loss_total = loss_polar + loss_action
+                radius_mae = torch.mean(torch.abs(polar_predict[:, 0] - batch_action[:, 0]))
+                theta_mae = torch.mean(torch.abs(polar_predict[:, 1] - batch_action[:, 1]))
+                action_acc = (action_logits.argmax(dim=1) == batch_action_id).float().mean()
                 self.optimizer.zero_grad()
-                loss_action.backward()
+                loss_total.backward()
                 self.optimizer.step()
 
-                print(f"Epoch {ep}, Step {global_step} , polar loss {loss_action:.6f}")
-                epoch_angle_loss += loss_action.item()
+                print(f"Epoch {ep}, Step {global_step} , total loss {loss_total:.6f}, polar loss {loss_polar:.6f}, action loss {loss_action:.6f}")
+                epoch_angle_loss += loss_total.item()
 
                 if self.writer:
-                    self.writer.add_scalar("Loss/step_polar", loss_action.item(), global_step)
+                    self.writer.add_scalar("Loss/step_total", loss_total.item(), global_step)
+                    self.writer.add_scalar("Loss/step_polar", loss_polar.item(), global_step)
+                    self.writer.add_scalar("Loss/step_action", loss_action.item(), global_step)
+                    self.writer.add_scalar("Acc/step_action", action_acc.item(), global_step)
                     self.writer.add_scalar("Loss/step_radius_mae" , radius_mae.item() , global_step)
                     self.writer.add_scalar("Loss/step_theta_mae" , theta_mae.item() , global_step)
                 global_step += 1
@@ -60,8 +67,8 @@ class Train:
 
             avg_angle_loss = epoch_angle_loss / local_step
             if self.writer:
-                self.writer.add_scalar("Loss/epoch_polar", avg_angle_loss, ep)
-            print(f"Epoch {ep+1} finished, average polar loss: {avg_angle_loss:.4f}")
+                self.writer.add_scalar("Loss/epoch_total", avg_angle_loss, ep)
+            print(f"Epoch {ep+1} finished, average total loss: {avg_angle_loss:.4f}")
             if (ep + 1) % 1 == 0:
                 save_path = f"{self.save_dir}/model_epoch_{ep+1}.pth"
                 torch.save(self.train_model.state_dict(), save_path)
@@ -69,30 +76,46 @@ class Train:
 
     def validate(self, step):
         self.train_model.eval()
+        val_total_loss = 0.0
+        val_polar_loss = 0.0
         val_action_loss = 0.0
         val_radius_mae = 0.0
         val_theta_mae = 0.0
+        val_action_acc = 0.0
         with torch.no_grad():
 
             for batch in self.val_loader:
-                batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action = batch
-                batch_audio  , batch_rgb , batch_depth , batch_action = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device), batch_action.to(self.device)
-                batch_action = batch_action.float()
+                batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action, batch_action_id = batch
+                batch_audio  , batch_rgb , batch_depth = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device)
+                batch_action = batch_action.to(self.device).float()
+                batch_action_id = batch_action_id.to(self.device).long()
 
-                action_predict = self.train_model(batch_audio , batch_rgb , batch_depth)
-                action_loss = F.mse_loss(action_predict, batch_action)
-                radius_mae = torch.mean(torch.abs(action_predict[:, 0] - batch_action[:, 0]))
-                theta_mae = torch.mean(torch.abs(action_predict[:, 1] - batch_action[:, 1]))
+                polar_predict, action_logits = self.train_model(batch_audio , batch_rgb , batch_depth)
+                polar_loss = F.mse_loss(polar_predict, batch_action)
+                action_loss = F.cross_entropy(action_logits, batch_action_id)
+                total_loss = polar_loss + action_loss
+                radius_mae = torch.mean(torch.abs(polar_predict[:, 0] - batch_action[:, 0]))
+                theta_mae = torch.mean(torch.abs(polar_predict[:, 1] - batch_action[:, 1]))
+                action_acc = (action_logits.argmax(dim=1) == batch_action_id).float().mean()
                 
+                val_total_loss += total_loss.item()
+                val_polar_loss += polar_loss.item()
                 val_action_loss += action_loss.item()
                 val_radius_mae += radius_mae.item()
                 val_theta_mae += theta_mae.item()
+                val_action_acc += action_acc.item()
 
+        avg_total_loss = val_total_loss / len(self.val_loader)
+        avg_polar_loss = val_polar_loss / len(self.val_loader)
         avg_action_loss = val_action_loss / len(self.val_loader)
         avg_radius_mae = val_radius_mae / len(self.val_loader)
         avg_theta_mae = val_theta_mae / len(self.val_loader)
+        avg_action_acc = val_action_acc / len(self.val_loader)
         if self.writer:
-            self.writer.add_scalar("Val/polar_loss", avg_action_loss, step)
+            self.writer.add_scalar("Val/total_loss", avg_total_loss, step)
+            self.writer.add_scalar("Val/polar_loss", avg_polar_loss, step)
+            self.writer.add_scalar("Val/action_loss", avg_action_loss, step)
+            self.writer.add_scalar("Val/action_acc", avg_action_acc, step)
             self.writer.add_scalar("Val/radius_mae", avg_radius_mae, step)
             self.writer.add_scalar("Val/theta_mae", avg_theta_mae, step)
         self.train_model.train()

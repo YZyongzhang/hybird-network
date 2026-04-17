@@ -1252,7 +1252,7 @@ class LoadLmdb:
         shard_size = int(getattr(config, "SHARD_SIZE", 10000))
         shard_id = 0
 
-        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids = [], [], [], [], [], [], []
         sound_label_to_id = {}
         stop_action_id = int(getattr(config, "STOP_ACTION_ID", 0))
 
@@ -1302,11 +1302,13 @@ class LoadLmdb:
                 polar_action = cls._point_to_polar(current_waypoint, waypoint_reference)
                 angel = np.degrees(v["angle"][1])
                 sound_id = torch.tensor(sound_ids[i], dtype=torch.long)
+                discrete_action = torch.tensor(action_id[i], dtype=torch.long)
 
                 buffer_rgb.append(rgb)
                 buffer_depth.append(depth)
                 buffer_audios.append(audio)
                 buffer_actions.append(polar_action)
+                buffer_action_ids.append(discrete_action)
                 buffer_angles.append(torch.tensor(angel))
                 buffer_sound_ids.append(sound_id)
 
@@ -1316,11 +1318,12 @@ class LoadLmdb:
                         "depth": torch.stack(buffer_depth),
                         "audios": torch.stack(buffer_audios),
                         "actions": torch.stack(buffer_actions),
+                        "action_ids": torch.stack(buffer_action_ids),
                         "angles": torch.stack(buffer_angles),
                         "sound_ids": torch.stack(buffer_sound_ids),
                     }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
                     print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
-                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_angles, buffer_sound_ids = [], [], [], [], [], []
+                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids = [], [], [], [], [], [], []
                     shard_id += 1
 
         if buffer_rgb:
@@ -1329,6 +1332,7 @@ class LoadLmdb:
                 "depth": torch.stack(buffer_depth),
                 "audios": torch.stack(buffer_audios),
                 "actions": torch.stack(buffer_actions),
+                "action_ids": torch.stack(buffer_action_ids),
                 "angles": torch.stack(buffer_angles),
                 "sound_ids": torch.stack(buffer_sound_ids),
             }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
