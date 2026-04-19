@@ -1206,36 +1206,6 @@ class LoadLmdb:
             "seq_len": seq_len,
         }
     @staticmethod
-    def _extract_turn_waypoints(action_id, path_points, start_point, stop_action_id=0):
-        actions = [int(a) for a in action_id]
-        if len(path_points) < len(actions) + 1:
-            return []
-
-        turn_action_ids = {2, 3}
-        waypoints = []
-        previous_waypoint = np.asarray(start_point, dtype=np.float32)
-        prev_idx = None
-        for idx, action in enumerate(actions):
-            if action == stop_action_id:
-                stop_point = np.asarray(path_points[idx], dtype=np.float32)
-                if not np.allclose(stop_point, previous_waypoint):
-                    waypoints.append((stop_point, previous_waypoint.copy()))
-                break
-            if action not in turn_action_ids:
-                continue
-            if idx == 0:
-                prev_idx = idx
-                continue
-            if prev_idx is not None and idx == prev_idx + 1 and actions[prev_idx] == action:
-                continue
-            turn_point = np.asarray(path_points[idx], dtype=np.float32)
-            if not np.allclose(turn_point, previous_waypoint):
-                waypoints.append((turn_point, previous_waypoint.copy()))
-                previous_waypoint = turn_point
-            prev_idx = idx
-        return waypoints
-
-    @staticmethod
     def _point_to_polar(current_point, reference_point):
         delta = np.asarray(current_point, dtype=np.float32) - np.asarray(reference_point, dtype=np.float32)
         x = float(delta[0])
@@ -1250,16 +1220,42 @@ class LoadLmdb:
         random.shuffle(files)
         os.makedirs(config.TO_PATH, exist_ok=True)
         shard_size = int(getattr(config, "SHARD_SIZE", 10000))
+        waypoint_step = int(getattr(config, "WAYPOINT_STEP", 5))
         shard_id = 0
 
-        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids = [], [], [], [], [], [], []
+        buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids, buffer_consistency = [], [], [], [], [], [], [], []
         sound_label_to_id = {}
-        stop_action_id = int(getattr(config, "STOP_ACTION_ID", 0))
+        consistency_step = int(getattr(config, "CONSISTENCY_STEP", 1))
+
+        def flush_shard():
+            nonlocal shard_id
+            if not buffer_rgb:
+                return
+            torch.save({
+                "rgb": torch.stack(buffer_rgb),
+                "depth": torch.stack(buffer_depth),
+                "audios": torch.stack(buffer_audios),
+                "actions": torch.stack(buffer_actions),
+                "action_ids": torch.stack(buffer_action_ids),
+                "angles": torch.stack(buffer_angles),
+                "sound_ids": torch.stack(buffer_sound_ids),
+                "consistency_actions": torch.stack(buffer_consistency),
+            }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
+            print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+            buffer_rgb.clear()
+            buffer_depth.clear()
+            buffer_audios.clear()
+            buffer_actions.clear()
+            buffer_action_ids.clear()
+            buffer_angles.clear()
+            buffer_sound_ids.clear()
+            buffer_consistency.clear()
+            shard_id += 1
 
         for file in tqdm(files, desc="Loading waypoint polar PT"):
             with open(file, "rb") as f:
                 data = pickle.load(f)
-            
+
             obs = data["obs"]
             action_id = np.array(data["action_id"]).reshape(-1).tolist()
             num_steps = max(0, len(obs) - 1)
@@ -1267,7 +1263,6 @@ class LoadLmdb:
                 continue
 
             path_points = data.get("path_point", [])
-            
             if len(path_points) == 1 and isinstance(path_points[0], (list, tuple, np.ndarray)):
                 first_item = path_points[0]
                 if len(first_item) > 0 and isinstance(first_item[0], (list, tuple, np.ndarray)):
@@ -1277,29 +1272,30 @@ class LoadLmdb:
 
             sound_values = cls._extract_sound_values_per_step(data, num_steps)
             sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
-            start_point = np.asarray(path_points[0], dtype=np.float32)
-            turn_waypoints = cls._extract_turn_waypoints(
-                action_id=action_id[:num_steps],
-                path_points=path_points,
-                start_point=start_point,
-                stop_action_id=stop_action_id,
-            )
-            if not turn_waypoints:
-                continue
-
-            waypoint_idx = 0
-            current_waypoint, waypoint_reference = turn_waypoints[waypoint_idx]
+            pre_rgb = None
+            pre_depth = None
 
             for i, v in enumerate(obs[:-1]):
                 current_point = np.asarray(path_points[i], dtype=np.float32)
-                while waypoint_idx + 1 < len(turn_waypoints) and np.allclose(current_point, current_waypoint):
-                    waypoint_idx += 1
-                    current_waypoint, waypoint_reference = turn_waypoints[waypoint_idx]
+                waypoint_index = min(i + waypoint_step, num_steps)
+                consistency_index = min(i + consistency_step, num_steps)
+                waypoint_point = np.asarray(path_points[waypoint_index], dtype=np.float32)
+                consistency_point = np.asarray(path_points[consistency_index], dtype=np.float32)
 
-                rgb = torch.from_numpy(v["rgb"]).float() / 255.0
-                depth = torch.from_numpy(v["depth"]).float()
+                rgb_now = torch.from_numpy(v["rgb"]).float() / 255.0
+                depth_now = torch.from_numpy(v["depth"]).float()
                 audio = torch.from_numpy(v["spectrogram"][0]).float()
-                polar_action = cls._point_to_polar(current_waypoint, waypoint_reference)
+                if pre_rgb is None:
+                    rgb = torch.cat([torch.zeros_like(rgb_now), rgb_now], dim=2)
+                    depth = torch.cat([torch.zeros_like(depth_now), depth_now], dim=2)
+                else:
+                    rgb = torch.cat([pre_rgb, rgb_now], dim=2)
+                    depth = torch.cat([pre_depth, depth_now], dim=2)
+                pre_rgb = rgb_now
+                pre_depth = depth_now
+
+                polar_action = cls._point_to_polar(waypoint_point, current_point)
+                consistency_action = cls._point_to_polar(consistency_point, current_point)
                 angel = np.degrees(v["angle"][1])
                 sound_id = torch.tensor(sound_ids[i], dtype=torch.long)
                 discrete_action = torch.tensor(action_id[i], dtype=torch.long)
@@ -1311,32 +1307,12 @@ class LoadLmdb:
                 buffer_action_ids.append(discrete_action)
                 buffer_angles.append(torch.tensor(angel))
                 buffer_sound_ids.append(sound_id)
+                buffer_consistency.append(consistency_action)
 
                 if len(buffer_rgb) >= shard_size:
-                    torch.save({
-                        "rgb": torch.stack(buffer_rgb),
-                        "depth": torch.stack(buffer_depth),
-                        "audios": torch.stack(buffer_audios),
-                        "actions": torch.stack(buffer_actions),
-                        "action_ids": torch.stack(buffer_action_ids),
-                        "angles": torch.stack(buffer_angles),
-                        "sound_ids": torch.stack(buffer_sound_ids),
-                    }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
-                    print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
-                    buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids = [], [], [], [], [], [], []
-                    shard_id += 1
+                    flush_shard()
 
-        if buffer_rgb:
-            torch.save({
-                "rgb": torch.stack(buffer_rgb),
-                "depth": torch.stack(buffer_depth),
-                "audios": torch.stack(buffer_audios),
-                "actions": torch.stack(buffer_actions),
-                "action_ids": torch.stack(buffer_action_ids),
-                "angles": torch.stack(buffer_angles),
-                "sound_ids": torch.stack(buffer_sound_ids),
-            }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
-            print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
+        flush_shard()
 
     @classmethod
     def load_offline_with_hybrid(cls, path, config):

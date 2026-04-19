@@ -55,8 +55,9 @@ class ShardedPTDataset(Dataset):
         action = data["actions"][local_idx]
         action_id = data["action_ids"][local_idx]
         angle = data['angles'][local_idx]
+        consistency_action = data["consistency_actions"][local_idx]
         std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        return  std_audio, rgb , depth , angle , action, action_id
+        return  std_audio, rgb , depth , angle , action, action_id, consistency_action
       
 class ShardedPTDatasetOffline(Dataset):
     def __init__(self, train_shard_dir, attention=False, preload=True):

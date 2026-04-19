@@ -81,6 +81,14 @@ class Finnal_model(nn.Module):
             nn.LayerNorm(128),
             nn.Linear(128, 2)
         )
+
+        self.angle_head = nn.Sequential(
+            nn.Linear(self.hidden_dim, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Linear(128, 8)
+        )
+        
         self.action_head = nn.Sequential(
             nn.Linear(self.hidden_dim, 128),
             nn.ReLU(),
