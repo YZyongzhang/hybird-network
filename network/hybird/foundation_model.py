@@ -75,18 +75,24 @@ class Finnal_model(nn.Module):
             nn.LayerNorm(hidden_dim),
         )
         
-        self.polar_head = nn.Sequential(
-            nn.Linear(self.hidden_dim, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            nn.Linear(128, 2)
+        # self.polar_head = nn.Sequential(
+        #     nn.Linear(self.hidden_dim, 128),
+        #     nn.ReLU(),
+        #     nn.LayerNorm(128),
+        #     nn.Linear(128, 2)
+        # )
+        self.polar_head_probe = nn.Sequential(
+            nn.Linear(self.hidden_dim , 2 )
         )
 
-        self.angle_head = nn.Sequential(
-            nn.Linear(self.hidden_dim, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            nn.Linear(128, 8)
+        # self.angle_head = nn.Sequential(
+        #     nn.Linear(self.hidden_dim, 128),
+        #     nn.ReLU(),
+        #     nn.LayerNorm(128),
+        #     nn.Linear(128, 8)
+        # )
+        self.angle_head_probe = nn.Sequential(
+            nn.Linear(self.hidden_dim , 8)
         )
         
         self.action_head = nn.Sequential(
@@ -149,9 +155,10 @@ class Network(nn.Module):
     def forward(self,audio , rgb , depth):
         embedding = self._action_embedding(audio, rgb, depth)
         dropped = self.final.dropout(embedding)
-        polar_predict = self.final.polar_head(dropped)
+        polar_predict = self.final.polar_head_probe(dropped)
+        angle_logits = self.final.angle_head_probe(dropped)
         action_logits = self.final.action_head(dropped)
-        return polar_predict, action_logits
+        return polar_predict, angle_logits , action_logits
 
     def forward_joint(self, audio, rgb, depth):
         """

@@ -930,6 +930,159 @@ class LoadLmdb:
                 'dones': torch.stack(buffer_dones)
             }, shard_path)
             print(f"保存 shard {shard_id}, size={len(buffer_states)})")
+            
+    @classmethod
+    def _normalize_path_points(cls, path_points):
+        if isinstance(path_points, np.ndarray):
+            path_points = path_points.tolist()
+        if len(path_points) == 1 and isinstance(path_points[0], (list, tuple, np.ndarray)):
+            first_item = path_points[0]
+            if len(first_item) > 0 and isinstance(first_item[0], (list, tuple, np.ndarray)):
+                path_points = first_item
+        return path_points
+
+    @classmethod
+    def _compute_waypoint_rewards(cls, data, rewards, dones, config):
+        num_steps = min(len(rewards), len(dones))
+        if num_steps <= 0:
+            return rewards[:num_steps]
+
+        path_points = cls._normalize_path_points(data.get("path_point", []))
+        if len(path_points) < num_steps + 1:
+            return [float(r) for r in rewards[:num_steps]]
+
+        reward_global_scale = float(getattr(config, "WAYPOINT_REWARD_SCALE", 1.0))
+        waypoint_step = max(1, int(getattr(config, "WAYPOINT_STEP", 5)))
+        waypoint_reached_threshold = float(getattr(config, "WAYPOINT_REACHED_THRESHOLD", 0.1))
+        reward_reach_bonus = float(getattr(config, "WAYPOINT_REACH_BONUS", 3.0))
+        reward_progress_scale = float(getattr(config, "WAYPOINT_PROGRESS_SCALE", 2.0))
+        reward_far_penalty_scale = float(getattr(config, "WAYPOINT_FAR_PENALTY_SCALE", 1.0))
+        reward_segment_scale = float(getattr(config, "WAYPOINT_SEGMENT_SCALE", 0.25))
+        reward_done_bonus = float(getattr(config, "WAYPOINT_DONE_BONUS", 5.0))
+        reward_min_clip = float(getattr(config, "WAYPOINT_REWARD_MIN_CLIP", -5.0))
+        reward_max_clip = float(getattr(config, "WAYPOINT_REWARD_MAX_CLIP", 8.0))
+
+        shaped_rewards = []
+        waypoint_index = min(waypoint_step, num_steps)
+        segment_id = 0
+
+        for i in range(num_steps):
+            current_point = np.asarray(path_points[i], dtype=np.float32)
+            next_point = np.asarray(path_points[i + 1], dtype=np.float32)
+            waypoint_point = np.asarray(path_points[waypoint_index], dtype=np.float32)
+
+            current_distance = float(np.linalg.norm(waypoint_point - current_point))
+            next_distance = float(np.linalg.norm(waypoint_point - next_point))
+            progress = current_distance - next_distance
+
+            shaped_reward = float(rewards[i]) * reward_global_scale
+            shaped_reward += progress * reward_progress_scale
+            if progress < 0:
+                shaped_reward += progress * reward_far_penalty_scale
+
+            reached_waypoint = next_distance <= waypoint_reached_threshold
+            if reached_waypoint:
+                shaped_reward += reward_reach_bonus + segment_id * reward_segment_scale
+                segment_id += 1
+                if waypoint_index < num_steps:
+                    waypoint_index = min(waypoint_index + waypoint_step, num_steps)
+
+            if cls._safe_to_bool(dones[i], default=False) and waypoint_index >= num_steps:
+                shaped_reward += reward_done_bonus
+
+            shaped_reward = float(np.clip(shaped_reward, reward_min_clip, reward_max_clip))
+            shaped_rewards.append(shaped_reward)
+
+        return shaped_rewards
+
+    @classmethod
+    def load_way_point_offline_lstm(cls , path , model , config , seq_len=5):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.TO_PATH, exist_ok=True)
+
+        seq_len = int(getattr(config, "SEQ_LEN", seq_len))
+        shard_size = int(getattr(config, "SHARD_SIZE", 2000))
+        shard_id = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        for file in tqdm(files, desc="Loading waypoint LSTM offline data"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._compute_waypoint_rewards(
+                data=data,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
+
+            limit = min(len(action_id), len(rewards), len(dones), max(0, len(obs) - 1))
+            if limit < seq_len:
+                continue
+
+            encoded_states = []
+            with torch.no_grad():
+                for i, v in enumerate(obs):
+                    rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                    depth = torch.from_numpy(v['depth']).float()
+                    audio = torch.from_numpy(v['spectrogram'][0]).float()
+                    if i == 0:
+                        pre_rgb = torch.zeros_like(rgb)
+                        pre_depth = torch.zeros_like(depth)
+                    state = model.embedding_forward(
+                        audio.to(model.device),
+                        torch.cat([pre_rgb, rgb], dim=2).to(model.device),
+                        torch.cat([pre_depth, depth], dim=2).to(model.device)
+                    )
+                    encoded_states.append(state.squeeze(0).cpu())
+                    pre_rgb = rgb
+                    pre_depth = depth
+
+            traj_len = len(encoded_states)
+            window_limit = min(limit, traj_len - 1)
+            for i in range(max(0, window_limit - seq_len + 1)):
+                state_seq = torch.stack(encoded_states[i:i+seq_len])
+                next_state_seq = torch.stack(encoded_states[i+1:i+1+seq_len])
+                a_seq = torch.tensor(action_id[i:i+seq_len], dtype=torch.long)
+                r_seq = torch.tensor(rewards[i:i+seq_len], dtype=torch.float)
+                d_seq = torch.tensor(dones[i:i+seq_len], dtype=torch.bool)
+                buffer_states.append(state_seq)
+                buffer_next_states.append(next_state_seq)
+                buffer_actions.append(a_seq)
+                buffer_rewards.append(r_seq)
+                buffer_dones.append(d_seq)
+
+                if len(buffer_states) >= shard_size:
+                    shard_path = os.path.join(config.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+                    torch.save({
+                        'states': torch.stack(buffer_states),
+                        'next_states': torch.stack(buffer_next_states),
+                        'actions': torch.stack(buffer_actions),
+                        'rewards': torch.stack(buffer_rewards),
+                        'dones': torch.stack(buffer_dones)
+                    }, shard_path)
+                    print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+
+                    buffer_states, buffer_next_states = [], []
+                    buffer_actions, buffer_rewards, buffer_dones = [], [], []
+                    shard_id += 1
+
+        if buffer_states:
+            shard_path = os.path.join(config.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save({
+                'states': torch.stack(buffer_states),
+                'next_states': torch.stack(buffer_next_states),
+                'actions': torch.stack(buffer_actions),
+                'rewards': torch.stack(buffer_rewards),
+                'dones': torch.stack(buffer_dones)
+            }, shard_path)
+            print(f"保存 shard {shard_id}, size={len(buffer_states)})")
 
     @classmethod
     def load_offline_lstm_v15(cls, path, model, config, seq_len=5):
@@ -1221,6 +1374,7 @@ class LoadLmdb:
         os.makedirs(config.TO_PATH, exist_ok=True)
         shard_size = int(getattr(config, "SHARD_SIZE", 10000))
         waypoint_step = int(getattr(config, "WAYPOINT_STEP", 5))
+        waypoint_reached_threshold = float(getattr(config, "WAYPOINT_REACHED_THRESHOLD", 0.1))
         shard_id = 0
 
         buffer_rgb, buffer_depth, buffer_audios, buffer_actions, buffer_action_ids, buffer_angles, buffer_sound_ids, buffer_consistency = [], [], [], [], [], [], [], []
@@ -1274,10 +1428,10 @@ class LoadLmdb:
             sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
             pre_rgb = None
             pre_depth = None
+            waypoint_index = min(waypoint_step, num_steps)
 
             for i, v in enumerate(obs[:-1]):
                 current_point = np.asarray(path_points[i], dtype=np.float32)
-                waypoint_index = min(i + waypoint_step, num_steps)
                 consistency_index = min(i + consistency_step, num_steps)
                 waypoint_point = np.asarray(path_points[waypoint_index], dtype=np.float32)
                 consistency_point = np.asarray(path_points[consistency_index], dtype=np.float32)
@@ -1308,6 +1462,11 @@ class LoadLmdb:
                 buffer_angles.append(torch.tensor(angel))
                 buffer_sound_ids.append(sound_id)
                 buffer_consistency.append(consistency_action)
+
+                if waypoint_index < num_steps:
+                    distance_to_waypoint = np.linalg.norm(waypoint_point - current_point)
+                    if distance_to_waypoint <= waypoint_reached_threshold:
+                        waypoint_index = min(waypoint_index + waypoint_step, num_steps)
 
                 if len(buffer_rgb) >= shard_size:
                     flush_shard()

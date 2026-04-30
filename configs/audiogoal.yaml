@@ -66,16 +66,16 @@ COLLECT:
 
 PT:
   OPEN: False
-  TYPE: "offlinesequence"
+  TYPE: "load_way_point_offline_lstm"
   RAW_DATA_PATH: 
     - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
     - "dataset-data3/dataset/pickle/offline(muti_collided)"
-    - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
+    - "dataset-data3/dataset/pickle/hybird(val_multiple)"
     # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
   TO_PATH: "media/pt/offline_way_point"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
-  CKPT: "PR/heard/ckpt/20260417_171814/model_epoch_300.pth"
+  CKPT: "PR/heard/ckpt/20260421_110241/model_epoch_300.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
@@ -98,7 +98,7 @@ TRAIN:
   # - OfflineRL -> 使用 TRAIN.OFFLINE
   # - OnlineRL  -> 使用 TRAIN.ONLINE
   # - DORL      -> 使用 TRAIN.DORL
-  TYPE: "HybirdNetwork"
+  TYPE: "OfflineRL"
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
@@ -124,7 +124,7 @@ TRAIN:
 
     train_shard_pattern:
       - "media/pt/offline_way_point"
-    ONLINE_CKPT:  "PR/heard/ckpt/20260417_171814/model_epoch_300.pth"
+    ONLINE_CKPT:  "PR/heard/ckpt/20260421_110241/model_epoch_300.pth"
 
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 55

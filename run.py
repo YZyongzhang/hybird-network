@@ -140,6 +140,7 @@ def _run_pt(pt_config):
         "offlinesequence":"load_offline_lstm_v15",
         "offlinelstm_by_level": "load_offline_lstm_level",
         "offlinelstm_by_level_audio_visual": "load_offline_lstm_level_audio_visual",
+        "load_way_point_offline_lstm":"load_way_point_offline_lstm"
     }
     if pt_config.TYPE not in ckpt_required_types:
         raise ValueError(f"Unsupported PT.TYPE: {pt_config.TYPE}")
