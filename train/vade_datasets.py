@@ -53,12 +53,66 @@ class ShardedPTDataset(Dataset):
         depth = data['depth'][local_idx]
         audio = data["audios"][local_idx]
         action = data["actions"][local_idx]
-        action_id = data["action_ids"][local_idx]
-        angle = data['angles'][local_idx]
-        consistency_action = data["consistency_actions"][local_idx]
+        # action_id = data["action_ids"][local_idx]
+        # angle = data['angles'][local_idx]
+        # consistency_action = data["consistency_actions"][local_idx]
         std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        return  std_audio, rgb , depth , angle , action, action_id, consistency_action
+        return  std_audio, rgb , depth  ,action
       
+class ShardedPTHybridDataset(Dataset):
+    def __init__(self, shard_pattern, preload=True, normalize_audio=True):
+        super().__init__()
+        self.shard_files = []
+        for pattern in shard_pattern:
+            self.shard_files.extend(sorted(glob.glob(pattern)))
+        assert len(self.shard_files) > 0, f"No shards found at {shard_pattern}"
+        self.preload = preload
+        self.normalize_audio = normalize_audio
+        self.shards = []
+        self.shard_sizes = []
+        self.index_map = []
+
+        for shard_id, shard_file in enumerate(self.shard_files):
+            print(f"scan hybrid shard id {shard_id}")
+            data = torch.load(shard_file, map_location="cpu")
+            size = len(data["actions"])
+            self.shard_sizes.append(size)
+            for i in range(size):
+                self.index_map.append((shard_id, i))
+            if preload:
+                self.shards.append(data)
+            else:
+                self.shards.append(None)
+
+        self.total_size = sum(self.shard_sizes)
+
+    def __len__(self):
+        return self.total_size
+
+    def __getitem__(self, index):
+        shard_id, local_idx = self.index_map[index]
+
+        if self.shards[shard_id] is None:
+            data = torch.load(self.shard_files[shard_id], map_location="cpu")
+            self.shards[shard_id] = data
+        else:
+            data = self.shards[shard_id]
+
+        rgb = data["rgb"][local_idx]
+        depth = data["depth"][local_idx]
+        audio = data["audios"][local_idx]
+        action = data["actions"][local_idx]
+        action_id = data["action_ids"][local_idx]
+        angle = data["angles"][local_idx]
+        sound_id = data["sound_ids"][local_idx]
+        pose = data["pose"][local_idx]
+        ego_map = data["ego_map"][local_idx]
+        collision = data["collision"][local_idx]
+        consistency_action = data["consistency_actions"][local_idx]
+        if self.normalize_audio:
+            audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+        return audio, rgb, depth, action, action_id, angle, sound_id, pose, ego_map, collision, consistency_action
+
 class ShardedPTDatasetOffline(Dataset):
     def __init__(self, train_shard_dir, attention=False, preload=True):
         """

@@ -10,6 +10,7 @@ from train.vade_conversion import LoadLmdb
 from train.vade_datasets import (
     RandomReloadShardedPTDatasetOffline,
     ShardedPTDataset,
+    ShardedPTHybridDataset,
     ShardedPTDatasetOffline,
     ShardedPTDatasetOfflineBuffer,
 )
@@ -17,6 +18,7 @@ from train.vade_datasets import (
 __all__ = [
     "LoadLmdb",
     "ShardedPTDataset",
+    "ShardedPTHybridDataset",
     "ShardedPTDatasetOffline",
     "RandomReloadShardedPTDatasetOffline",
     "ShardedPTDatasetOfflineBuffer",

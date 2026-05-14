@@ -102,8 +102,7 @@ def _run_collect(config, collect_config):
             offline_model=offline_model,
         )
     else:
-        model = _load_hybrid_model(collect_config.COLLECT_CKPT)
-        collecter = COLLECTER(config, env, model=model)
+        collecter = COLLECTER(config, env , collect_ckpt = collect_config.COLLECT_CKPT )
     logger.info("collect begin")
     Collect(collecter=collecter)
     logger.info("collect finished")
@@ -140,7 +139,9 @@ def _run_pt(pt_config):
         "offlinesequence":"load_offline_lstm_v15",
         "offlinelstm_by_level": "load_offline_lstm_level",
         "offlinelstm_by_level_audio_visual": "load_offline_lstm_level_audio_visual",
-        "load_way_point_offline_lstm":"load_way_point_offline_lstm"
+        "load_way_point_offline_lstm":"load_way_point_offline_lstm",
+        "load_hybrid_action_sequence":"load_hybrid_action_sequence",
+        "load_pt_hybrid":"load_pt_hybrid"
     }
     if pt_config.TYPE not in ckpt_required_types:
         raise ValueError(f"Unsupported PT.TYPE: {pt_config.TYPE}")
@@ -939,6 +940,15 @@ def _run_train(config, train_config):
         model = AudioCRNN()
         Train(model=model, trainer=HybirdNetworkAudioTrain, config=train_config)
         logger.info("train finished: HybirdNetworkAudio")
+        return
+    
+    if train_config.TYPE == "HybridNetworkActionSequence":
+        from network import HybridNetworkWan
+        from train import HybridNetworkActionSequenceTrain
+
+        model = HybridNetworkWan()
+        Train(model=model, trainer= HybridNetworkActionSequenceTrain, config=train_config)
+        logger.info("train finished:  HybridNetworkActionSequenceTrain")
         return
 
     if train_config.TYPE == "SemanticAudio":

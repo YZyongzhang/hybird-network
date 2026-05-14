@@ -1,5 +1,6 @@
 from train import (
     ShardedPTDataset,
+    ShardedPTHybridDataset,
     ShardedPTDatasetOffline,
     RandomReloadShardedPTDatasetOffline,
     ShardedPTDatasetOfflineBuffer,
@@ -164,8 +165,8 @@ def Train(model ,trainer , config , device = None , **kwargs):
                 seed=random_shard_seed,
             )
         else:
-            train_dataset = ShardedPTDataset(shard_pattern=config.train_shard_pattern)
-        val_dataset = ShardedPTDataset(shard_pattern=config.val_shard_pattern)
+            train_dataset = ShardedPTHybridDataset(shard_pattern=config.train_shard_pattern)
+        val_dataset = ShardedPTHybridDataset(shard_pattern=config.val_shard_pattern)
         print(train_dataset.__len__())
         print(val_dataset.__len__())
         loader_kwargs = {

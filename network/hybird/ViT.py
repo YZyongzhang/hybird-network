@@ -204,7 +204,7 @@ class ViTEncoder(nn.Module):
         
         self.hidden_dim = 1024
 
-        self.down_dim_1 = nn.Linear(in_features=  32*128 , out_features= self.hidden_dim)
+        self.down_dim_1 = nn.Linear(in_features=  20*128 , out_features= self.hidden_dim)
         self.down_dim_2 = nn.Linear(in_features= self.hidden_dim , out_features= self.hidden_dim // 2)
         self.activate = nn.ReLU()
     def forward(self , audio , visual):

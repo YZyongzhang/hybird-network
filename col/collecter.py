@@ -1,6 +1,16 @@
 from habitat import Config
 from ss_baselines.common.environments import AudioNavRLEnv
 from col.register import CollectRegister
+import torch
+def _load_hybrid_model(ckpt_path):
+    from network import HybirdNetwork
+
+    device = torch.device('cuda')
+    model = HybirdNetwork().to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    model.eval()
+    return model
+
 class COLLECTER:
     """
     collecter
@@ -16,6 +26,7 @@ class COLLECTER:
             cls = CollectRegister.get(self.collect_config.TYPE)
             
             if self.collect_config.TYPE in ['offlineRL' , 'offlineRLtwoframe' ,'collided']:
+                model = _load_hybrid_model(kwargs['collect_ckpt'])
                 self.collecter = cls(self.env , self.collect_config , model = kwargs['model'])
             elif self.collect_config.TYPE in ['offlineRL_v1_5']:
                 self.collecter = cls(

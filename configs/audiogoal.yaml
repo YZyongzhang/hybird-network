@@ -20,7 +20,7 @@ SIMULATOR:
 TASK:
   TYPE: AudioNav
   SUCCESS_DISTANCE: 1.0
-  SENSORS: ["SPECTROGRAM_SENSOR", "AngleSensor"]
+  SENSORS: ["SPECTROGRAM_SENSOR", "AngleSensor" , 'Collision' , 'EgoMap' , 'PoseSensor']
   GOAL_SENSOR_UUID: spectrogram
   MEASUREMENTS:
     - "DISTANCE_TO_GOAL"
@@ -59,21 +59,21 @@ COLLECT:
   POLICY_MIX_RANDOM: 0.10
   DATA_STRUCT:
     {"obs": [], "reward": [], "done": [], "action_id": [], "info": [], "map": [], "path_point": [], "sound_id": [], "greedy_action": [], "total_sound_point": []}
-  DATA_DIR: "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  DATA_DIR: "dataset-data3/dataset/pickle/av_wan"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
-  OPEN: False
-  TYPE: "load_way_point_offline_lstm"
+  OPEN: True
+  TYPE: "load_pt_hybrid"
   RAW_DATA_PATH: 
-    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
-    - "dataset-data3/dataset/pickle/offline(muti_collided)"
-    - "dataset-data3/dataset/pickle/hybird(val_multiple)"
+    # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    # # - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    - "dataset-data3/dataset/pickle/av_wan"
     # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/offline_way_point"
+  TO_PATH: "media/pt/av_wan"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   CKPT: "PR/heard/ckpt/20260421_110241/model_epoch_300.pth"
   SHARD_SIZE: 10000
@@ -92,24 +92,24 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: True
+  OPEN: False
   # 一级分支（TRAIN.TYPE）:
   # - HybirdNetwork / HybirdNetworkAudio
   # - OfflineRL -> 使用 TRAIN.OFFLINE
   # - OnlineRL  -> 使用 TRAIN.ONLINE
   # - DORL      -> 使用 TRAIN.DORL
-  TYPE: "OfflineRL"
+  TYPE: "HybridNetworkActionSequence"
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
   # Used only when TYPE is HybirdNetwork/HybirdNetworkAudio
   EPOCH: 300
   BATCH_SIZE: 128
-  train_shard_pattern: ["media/pt/way_point/foundation_model_shard_*.pt"]
-  val_shard_pattern: ["media/pt/way_point_val/foundation_model_shard_*.pt"]
+  train_shard_pattern: ["media/pt/hybrid_action_sequence/hybrid_action_sequence_shard_*.pt"]
+  val_shard_pattern: ["media/pt/hybrid_action_sequence_val/hybrid_action_sequence_shard_*.pt"]
 
   RANDOM_SHARD_RELOAD: True
-  RANDOM_SHARDS_PER_EPOCH: 5
+  RANDOM_SHARDS_PER_EPOCH: 3
   RELOAD_SHARDS_EVERY_EPOCHS: 10
 
   OFFLINE:
@@ -316,8 +316,8 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "val_multiple"
+  SPLIT: "train_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"
-  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}_sample_50.json.gz"
+  DATA_PATH: "data/datasets/audionav/mp3d/{version}/{split}/{split}.json.gz"

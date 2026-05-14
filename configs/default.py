@@ -15,6 +15,7 @@ import numpy as np
 
 from habitat import get_config as get_task_config
 from habitat.config import Config as CN
+from habitat.config.default import SIMULATOR_SENSOR
 import habitat
 
 DEFAULT_CONFIG_DIR = "configs/"
@@ -110,6 +111,19 @@ _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 # ANGLE_SENSOR
 _TC.TASK.AngleSensor = CN()
 _TC.TASK.AngleSensor.TYPE = "AngleSensor"
+
+#Collision_SENSOR
+_TC.TASK.Collision = CN()
+_TC.TASK.Collision.TYPE = "Collision"
+#POSE_SENSOR
+_TC.TASK.PoseSensor = CN()
+_TC.TASK.PoseSensor.TYPE = "PoseSensor"
+#egomap
+_TC.TASK.EgoMap = SIMULATOR_SENSOR.clone()
+_TC.TASK.EgoMap.TYPE = "EgoMap"
+_TC.TASK.EgoMap.MAP_SIZE = 31
+_TC.TASK.EgoMap.MAP_RESOLUTION = 0.1
+_TC.TASK.EgoMap.HEIGHT_THRESH = (0.5, 2.0)
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5
