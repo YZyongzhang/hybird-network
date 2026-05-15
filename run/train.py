@@ -1,6 +1,7 @@
 from train import (
     ShardedPTDataset,
     ShardedPTHybridDataset,
+    ShardedPTAVWANDataset,
     ShardedPTDatasetOffline,
     RandomReloadShardedPTDatasetOffline,
     ShardedPTDatasetOfflineBuffer,
@@ -63,6 +64,7 @@ def Train(model ,trainer , config , device = None , **kwargs):
                 attention=True,
             )
         else:
+            
             if config.buffer:
                 train_dataset = ShardedPTDatasetOfflineBuffer(train_json=config.train_shard_pattern)
             else:
@@ -157,16 +159,29 @@ def Train(model ,trainer , config , device = None , **kwargs):
         reload_shards_every_epochs = int(getattr(config, "RELOAD_SHARDS_EVERY_EPOCHS", 10))
         random_shard_seed = getattr(config, "RANDOM_SHARD_SEED", None)
 
-        if random_shard_reload:
-            train_dataset = RandomReloadShardedPTDatasetFoundation(
-                shard_pattern=config.train_shard_pattern,
-                shards_per_epoch=random_shards_per_epoch,
-                reload_every_epochs=reload_shards_every_epochs,
-                seed=random_shard_seed,
-            )
+        if config.TYPE == "AVWANHybridNetwork":
+            if random_shard_reload:
+                train_dataset = RandomReloadShardedPTDatasetFoundation(
+                    shard_pattern=config.train_shard_pattern,
+                    shards_per_epoch=random_shards_per_epoch,
+                    reload_every_epochs=reload_shards_every_epochs,
+                    seed=random_shard_seed,
+                    sample_builder=ShardedPTAVWANDataset.build_sample,
+                )
+            else:
+                train_dataset = ShardedPTAVWANDataset(shard_pattern=config.train_shard_pattern)
+            val_dataset = ShardedPTAVWANDataset(shard_pattern=config.val_shard_pattern)
         else:
-            train_dataset = ShardedPTHybridDataset(shard_pattern=config.train_shard_pattern)
-        val_dataset = ShardedPTHybridDataset(shard_pattern=config.val_shard_pattern)
+            if random_shard_reload:
+                train_dataset = RandomReloadShardedPTDatasetFoundation(
+                    shard_pattern=config.train_shard_pattern,
+                    shards_per_epoch=random_shards_per_epoch,
+                    reload_every_epochs=reload_shards_every_epochs,
+                    seed=random_shard_seed,
+                )
+            else:
+                train_dataset = ShardedPTHybridDataset(shard_pattern=config.train_shard_pattern)
+            val_dataset = ShardedPTHybridDataset(shard_pattern=config.val_shard_pattern)
         print(train_dataset.__len__())
         print(val_dataset.__len__())
         loader_kwargs = {

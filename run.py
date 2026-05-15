@@ -969,6 +969,15 @@ def _run_train(config, train_config):
         logger.info("train finished: HybirdNetwork")
         return
 
+    if train_config.TYPE == "AVWANHybridNetwork":
+        from network import AVWANNetwork
+        from train import AVWANHybridTrain
+
+        model = AVWANNetwork()
+        Train(model=model, trainer=AVWANHybridTrain, config=train_config)
+        logger.info("train finished: AVWANHybridNetwork")
+        return
+
     if train_config.TYPE == "OfflineRL":
         offline_config = train_config.OFFLINE
         sac_model, trainer, online_test = _build_offline_agent(config, offline_config)

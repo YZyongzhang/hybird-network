@@ -11,6 +11,7 @@ from train.vade_datasets import (
     RandomReloadShardedPTDatasetOffline,
     ShardedPTDataset,
     ShardedPTHybridDataset,
+    ShardedPTAVWANDataset,
     ShardedPTDatasetOffline,
     ShardedPTDatasetOfflineBuffer,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "LoadLmdb",
     "ShardedPTDataset",
     "ShardedPTHybridDataset",
+    "ShardedPTAVWANDataset",
     "ShardedPTDatasetOffline",
     "RandomReloadShardedPTDatasetOffline",
     "ShardedPTDatasetOfflineBuffer",

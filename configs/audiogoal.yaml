@@ -59,21 +59,21 @@ COLLECT:
   POLICY_MIX_RANDOM: 0.10
   DATA_STRUCT:
     {"obs": [], "reward": [], "done": [], "action_id": [], "info": [], "map": [], "path_point": [], "sound_id": [], "greedy_action": [], "total_sound_point": []}
-  DATA_DIR: "dataset-data3/dataset/pickle/av_wan"
+  DATA_DIR: "dataset-data3/dataset/pickle/av_wan_val"
   IMG_DIR: ""
   IMG_TYPE: ""
   COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
-  OPEN: True
+  OPEN: False
   TYPE: "load_pt_hybrid"
   RAW_DATA_PATH: 
     # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
     # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
     # # - "dataset-data3/dataset/pickle/offline(muti_collided)"
-    - "dataset-data3/dataset/pickle/av_wan"
+    - "dataset-data3/dataset/pickle/av_wan_val"
     # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/av_wan"
+  TO_PATH: "media/pt/av_wan_val"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   CKPT: "PR/heard/ckpt/20260421_110241/model_epoch_300.pth"
   SHARD_SIZE: 10000
@@ -92,21 +92,21 @@ PT:
   REWARD_MAX_CLIP: 100.0
 
 TRAIN:
-  OPEN: False
+  OPEN: True
   # 一级分支（TRAIN.TYPE）:
   # - HybirdNetwork / HybirdNetworkAudio
   # - OfflineRL -> 使用 TRAIN.OFFLINE
   # - OnlineRL  -> 使用 TRAIN.ONLINE
   # - DORL      -> 使用 TRAIN.DORL
-  TYPE: "HybridNetworkActionSequence"
+  TYPE: "AVWANHybridNetwork"
   SAVE_LOADER: False
   EXPERIMENT_CKPT_DIR: "PR/heard/ckpt"
 
   # Used only when TYPE is HybirdNetwork/HybirdNetworkAudio
   EPOCH: 300
   BATCH_SIZE: 128
-  train_shard_pattern: ["media/pt/hybrid_action_sequence/hybrid_action_sequence_shard_*.pt"]
-  val_shard_pattern: ["media/pt/hybrid_action_sequence_val/hybrid_action_sequence_shard_*.pt"]
+  train_shard_pattern: ["media/pt/av_wan/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["media/pt/av_wan_val/foundation_model_shard_*.pt"]
 
   RANDOM_SHARD_RELOAD: True
   RANDOM_SHARDS_PER_EPOCH: 3
@@ -316,7 +316,7 @@ EVAL:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_multiple"
+  SPLIT: "val_multiple"
   CONTENT_SCENES: ["*"]
   VERSION: "v1"
   SCENES_DIR: "data/scene_datasets/mp3d"
