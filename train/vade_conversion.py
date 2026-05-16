@@ -1425,6 +1425,7 @@ class LoadLmdb:
 
             encoded_states = []
             chunk_audio, chunk_trgb, chunk_tdepth = [], [], []
+            chunk_pose, chunk_ego_map = [], []
             pre_rgb, pre_depth = None, None
 
             for i in range(limit + 1):
@@ -1432,6 +1433,8 @@ class LoadLmdb:
                 rgb = torch.from_numpy(v['rgb']).float() / 255.0
                 depth = torch.from_numpy(v['depth']).float()
                 audio = torch.from_numpy(v['spectrogram'][0]).float()
+                pose = torch.as_tensor(v['pose'], dtype=torch.float32)
+                ego_map = torch.from_numpy(v['ego_map']).float()
 
                 if pre_rgb is None:
                     prev_rgb = torch.zeros_like(rgb)
@@ -1448,6 +1451,8 @@ class LoadLmdb:
                 chunk_audio.append(audio)
                 chunk_trgb.append(trgb)
                 chunk_tdepth.append(tdepth)
+                chunk_pose.append(pose)
+                chunk_ego_map.append(ego_map)
 
                 if len(chunk_audio) >= embed_batch_size:
                     with torch.no_grad():
@@ -1455,6 +1460,8 @@ class LoadLmdb:
                             torch.stack(chunk_audio).to(device),
                             torch.stack(chunk_trgb).to(device),
                             torch.stack(chunk_tdepth).to(device),
+                            torch.stack(chunk_pose).to(device),
+                            torch.stack(chunk_ego_map).to(device),
                         )
                     if states.dim() == 1:
                         states = states.unsqueeze(0)
@@ -1463,6 +1470,8 @@ class LoadLmdb:
                     chunk_audio.clear()
                     chunk_trgb.clear()
                     chunk_tdepth.clear()
+                    chunk_pose.clear()
+                    chunk_ego_map.clear()
 
             if chunk_audio:
                 with torch.no_grad():
@@ -1470,6 +1479,8 @@ class LoadLmdb:
                         torch.stack(chunk_audio).to(device),
                         torch.stack(chunk_trgb).to(device),
                         torch.stack(chunk_tdepth).to(device),
+                        torch.stack(chunk_pose).to(device),
+                        torch.stack(chunk_ego_map).to(device),
                     )
                 if states.dim() == 1:
                     states = states.unsqueeze(0)

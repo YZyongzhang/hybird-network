@@ -75,7 +75,7 @@ PT:
     # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
   TO_PATH: "media/pt/av_wan_offline"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
-  CKPT: "PR/heard/ckpt/20260514_222629/model_epoch_300.pth"
+  CKPT: "PR/heard/ckpt/20260516_121249/model_epoch_300.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
@@ -124,7 +124,7 @@ TRAIN:
 
     train_shard_pattern:
       - "media/pt/av_wan_offline"
-    ONLINE_CKPT:  "PR/heard/ckpt/20260514_222629/model_epoch_300.pth"
+    ONLINE_CKPT:  "PR/heard/ckpt/20260516_121249/model_epoch_300.pth"
 
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 55
@@ -141,7 +141,7 @@ TRAIN:
     batch_size: 512
     num_epochs: 150
 
-    state_dim: 128
+    state_dim: 384
     action_dim: 4
     hidden_dim: 128
     # lr: 0.0002

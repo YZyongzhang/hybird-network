@@ -103,10 +103,15 @@ class Network(nn.Module):
         return self.ego_map_encoder(ego_map.float())
 
     def embedding_forward(self, audio, rgb, depth , pose , ego_map):
+        if len(pose.shape) == 1:
+            pose = pose.unsqueeze(0)
+        if len(ego_map.shape) == 3:
+            ego_map = ego_map.unsqueeze(0)
         av_feature = self._encode_audio_visual(audio, rgb, depth)
         pose_feature = self._encode_pose(pose)
         ego_map_feature = self._encode_ego_map(ego_map)
-        fused = torch.cat([av_feature, pose_feature, ego_map_feature], dim=1)
+        fused = torch.cat([av_feature, pose_feature, ego_map_feature], dim=1).squeeze(0)
+        # import pdb;pdb.set_trace()
         return fused
 
     def encode_state(self, audio, rgb, depth, pose, ego_map):

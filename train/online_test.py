@@ -368,13 +368,15 @@ class OnlineTest:
                     rgb = torch.from_numpy(obs["rgb"]).float() / 255.0
                     depth = torch.from_numpy(obs["depth"]).float()
                     audio = self._get_audio_tensor(obs)
+                    ego_map = torch.from_numpy(obs['ego_map'])
+                    pose = torch.from_numpy(obs['pose'])
                     if pre_rgb is None:
                         pre_rgb = torch.zeros_like(rgb)
                         pre_depth = torch.zeros_like(depth)
                     trgb = torch.cat([pre_rgb, rgb], dim=2)
                     tdepth = torch.cat([pre_depth, depth], dim=2)
                     state = self.hybirdmodel.embedding_forward(
-                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
+                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device) ,  pose.to(self.device),ego_map.to(self.device)
                     ).detach().cpu()
                     state_queue.append(state)
 
