@@ -1366,6 +1366,140 @@ class LoadLmdb:
         }
 
     @classmethod
+    def load_offline_rl_features(cls, path, model, config, seq_len=5):
+        files = cls.get_files(path=path)
+        random.shuffle(files)
+
+        os.makedirs(config.TO_PATH, exist_ok=True)
+
+        seq_len = int(getattr(config, "SEQ_LEN", seq_len))
+        shard_size = int(getattr(config, "SHARD_SIZE", 2000))
+        embed_batch_size = int(getattr(config, "EMBED_BATCH_SIZE", 64))
+        device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        shard_id = 0
+        total_samples = 0
+
+        buffer_states, buffer_next_states = [], []
+        buffer_actions, buffer_rewards, buffer_dones = [], [], []
+
+        def flush_shard():
+            nonlocal shard_id, total_samples
+            if not buffer_states:
+                return
+            shard_path = os.path.join(config.TO_PATH, f"offline_rl_lstm_shard_{shard_id}.pt")
+            torch.save(
+                {
+                    "states": torch.stack(buffer_states),
+                    "next_states": torch.stack(buffer_next_states),
+                    "actions": torch.stack(buffer_actions),
+                    "rewards": torch.stack(buffer_rewards),
+                    "dones": torch.stack(buffer_dones),
+                },
+                shard_path,
+            )
+            print(f"保存 shard {shard_id}, size={len(buffer_states)}")
+            total_samples += len(buffer_states)
+            shard_id += 1
+            buffer_states.clear()
+            buffer_next_states.clear()
+            buffer_actions.clear()
+            buffer_rewards.clear()
+            buffer_dones.clear()
+
+        for file in tqdm(files, desc="Extracting offline RL LSTM features"):
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+
+            obs = data['obs']
+            action_id, rewards, dones = cls._read_transition_arrays(data)
+            rewards = cls._reshape_rewards(
+                data=data,
+                action_id=action_id,
+                rewards=rewards,
+                dones=dones,
+                config=config,
+            )
+            limit = min(len(action_id), len(rewards), len(dones), max(0, len(obs) - 1))
+            if limit < seq_len:
+                continue
+
+            encoded_states = []
+            chunk_audio, chunk_trgb, chunk_tdepth = [], [], []
+            pre_rgb, pre_depth = None, None
+
+            for i in range(limit + 1):
+                v = obs[i]
+                rgb = torch.from_numpy(v['rgb']).float() / 255.0
+                depth = torch.from_numpy(v['depth']).float()
+                audio = torch.from_numpy(v['spectrogram'][0]).float()
+
+                if pre_rgb is None:
+                    prev_rgb = torch.zeros_like(rgb)
+                    prev_depth = torch.zeros_like(depth)
+                else:
+                    prev_rgb = pre_rgb
+                    prev_depth = pre_depth
+
+                trgb = torch.cat([prev_rgb, rgb], dim=2)
+                tdepth = torch.cat([prev_depth, depth], dim=2)
+                pre_rgb = rgb
+                pre_depth = depth
+
+                chunk_audio.append(audio)
+                chunk_trgb.append(trgb)
+                chunk_tdepth.append(tdepth)
+
+                if len(chunk_audio) >= embed_batch_size:
+                    with torch.no_grad():
+                        states = model.embedding_forward(
+                            torch.stack(chunk_audio).to(device),
+                            torch.stack(chunk_trgb).to(device),
+                            torch.stack(chunk_tdepth).to(device),
+                        )
+                    if states.dim() == 1:
+                        states = states.unsqueeze(0)
+                    states = states.detach().cpu()
+                    encoded_states.extend([states[j] for j in range(states.shape[0])])
+                    chunk_audio.clear()
+                    chunk_trgb.clear()
+                    chunk_tdepth.clear()
+
+            if chunk_audio:
+                with torch.no_grad():
+                    states = model.embedding_forward(
+                        torch.stack(chunk_audio).to(device),
+                        torch.stack(chunk_trgb).to(device),
+                        torch.stack(chunk_tdepth).to(device),
+                    )
+                if states.dim() == 1:
+                    states = states.unsqueeze(0)
+                states = states.detach().cpu()
+                encoded_states.extend([states[j] for j in range(states.shape[0])])
+
+            if len(encoded_states) < limit + 1:
+                continue
+
+            for i in range(limit - seq_len + 1):
+                buffer_states.append(torch.stack(encoded_states[i:i+seq_len]))
+                buffer_next_states.append(torch.stack(encoded_states[i+1:i+1+seq_len]))
+                buffer_actions.append(torch.tensor(action_id[i:i+seq_len], dtype=torch.long))
+                buffer_rewards.append(torch.tensor(rewards[i:i+seq_len], dtype=torch.float32))
+                buffer_dones.append(torch.tensor(dones[i:i+seq_len], dtype=torch.bool))
+                if len(buffer_states) >= shard_size:
+                    flush_shard()
+
+        flush_shard()
+        print(f"RL LSTM 特征提取完成，总样本数: {total_samples}, 输出目录: {config.TO_PATH}")
+        return {
+            "output_dir": config.TO_PATH,
+            "total_samples": total_samples,
+            "num_shards": shard_id,
+            "shard_size": shard_size,
+            "seq_len": seq_len,
+            "embed_batch_size": embed_batch_size,
+        }
+
+    @classmethod
     def load_offline_one_frame(cls, path, model, config, seq_len=5):
         files = cls.get_files(path=path)
         random.shuffle(files)

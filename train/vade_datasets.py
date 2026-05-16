@@ -162,14 +162,13 @@ class ShardedPTAVWANDataset(Dataset):
         action = data["actions"][local_idx]
         action_id = data["action_ids"][local_idx]
         angle = data["angles"][local_idx]
-        sound_id = data["sound_ids"][local_idx]
         pose = data["pose"][local_idx]
         ego_map = data["ego_map"][local_idx]
         collision = data["collision"][local_idx].float()
         consistency_action = data["consistency_actions"][local_idx]
         if normalize_audio:
             audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        return audio, rgb, depth, angle, action, action_id, sound_id, pose, ego_map, collision, consistency_action
+        return audio, rgb, depth, angle, action, action_id, pose, ego_map, collision, consistency_action
 
     def __len__(self):
         return self.total_size

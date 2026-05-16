@@ -43,11 +43,12 @@ def _resolve_onlinerl_setup(online_cfg):
 
 
 def _load_hybrid_model(ckpt_path):
-    from network import HybirdNetwork
+    # from network import HybirdNetwork
+    from network.av_wan_network import Network
 
     device = _get_device()
     logger.info("loading hybrid model ckpt: %s", ckpt_path)
-    model = HybirdNetwork().to(device)
+    model = Network().to(device)
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
     model.eval()
     logger.info("hybrid model loaded on device=%s", device)
@@ -129,8 +130,10 @@ def _run_pt(pt_config):
     # Types below require foundation ckpt.
     ckpt_required_types = {
         "OfflineTwoFrameWithHybridPT": "load_offline_two_frame",
+        "OfflineRLFeatures": "load_offline_rl_features",
         "offline": "load_offline",
         "offlinetwoframe": "load_offline_two_frame",
+        "av_wan_offline_rl_features": "load_offline_rl_features",
         "offlineoneframe": "load_offline_one_frame",
         "offlinelstm": "load_offline_lstm",
         "offlinelstm_v15": "load_offline_lstm_v15",
