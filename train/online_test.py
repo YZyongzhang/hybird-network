@@ -376,7 +376,7 @@ class OnlineTest:
                     trgb = torch.cat([pre_rgb, rgb], dim=2)
                     tdepth = torch.cat([pre_depth, depth], dim=2)
                     state = self.hybirdmodel.embedding_forward(
-                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device) ,  pose.to(self.device),ego_map.to(self.device)
+                        audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
                     ).detach().cpu()
                     state_queue.append(state)
 
@@ -463,13 +463,13 @@ class OnlineTest:
                     action_sac = self._to_env_action(
                         sac_model.get_action(seq_state.to(self.device), eval=True)
                     )
-                    action_hybird = int(
-                        self.hybirdmodel(
-                            audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
-                        )
-                        .argmax(dim=1)
-                        .item()
-                    )
+                    # action_hybird = int(
+                    #     self.hybirdmodel(
+                    #         audio.to(self.device), trgb.to(self.device), tdepth.to(self.device)
+                    #     )
+                    #     .argmax(dim=1)
+                    #     .item()
+                    # )
                     pre_rgb = rgb
                     pre_depth = depth
 

@@ -112,7 +112,8 @@ class Network(nn.Module):
         ego_map_feature = self._encode_ego_map(ego_map)
         fused = torch.cat([av_feature, pose_feature, ego_map_feature], dim=1).squeeze(0)
         # import pdb;pdb.set_trace()
-        return fused
+        embedding = self.fusion(fused)
+        return embedding
 
     def encode_state(self, audio, rgb, depth, pose, ego_map):
         av_feature = self._encode_audio_visual(audio, rgb, depth)

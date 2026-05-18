@@ -179,9 +179,15 @@ def Train(model ,trainer , config , device = None , **kwargs):
                     reload_every_epochs=reload_shards_every_epochs,
                     seed=random_shard_seed,
                 )
+                val_dataset = RandomReloadShardedPTDatasetFoundation(
+                    shard_pattern=config.val_shard_pattern,
+                    shards_per_epoch=random_shards_per_epoch,
+                    reload_every_epochs=reload_shards_every_epochs,
+                    seed=random_shard_seed,
+                    )
             else:
                 train_dataset = ShardedPTHybridDataset(shard_pattern=config.train_shard_pattern)
-            val_dataset = ShardedPTHybridDataset(shard_pattern=config.val_shard_pattern)
+                val_dataset = ShardedPTHybridDataset(shard_pattern=config.val_shard_pattern)
         print(train_dataset.__len__())
         print(val_dataset.__len__())
         loader_kwargs = {

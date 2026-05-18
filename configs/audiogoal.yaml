@@ -66,16 +66,16 @@ COLLECT:
 
 PT:
   OPEN: False
-  TYPE: "av_wan_offline_rl_features"
+  TYPE: "load_way_point_offline_lstm"
   RAW_DATA_PATH: 
-    # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-    # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
-    # # - "dataset-data3/dataset/pickle/offline(muti_collided)"
-    - "dataset-data3/dataset/pickle/av_wan"
-    # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/av_wan_offline"
+    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
+    - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  TO_PATH: "media/pt/way_point_offline"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
-  CKPT: "PR/heard/ckpt/20260516_121249/model_epoch_300.pth"
+  CKPT: "PR/heard/ckpt/20260516_222029/model_epoch_300.pth"
   SHARD_SIZE: 10000
   SEQ_LEN: 5
   EMBED_BATCH_SIZE: 64
@@ -105,8 +105,8 @@ TRAIN:
   # Used only when TYPE is HybirdNetwork/HybirdNetworkAudio
   EPOCH: 300
   BATCH_SIZE: 128
-  train_shard_pattern: ["media/pt/av_wan/foundation_model_shard_*.pt"]
-  val_shard_pattern: ["media/pt/av_wan_val/foundation_model_shard_*.pt"]
+  train_shard_pattern: ["media/pt/way_point/foundation_model_shard_*.pt"]
+  val_shard_pattern: ["media/pt/way_point_val/foundation_model_shard_*.pt"]
 
   RANDOM_SHARD_RELOAD: True
   RANDOM_SHARDS_PER_EPOCH: 3
@@ -114,7 +114,7 @@ TRAIN:
 
   OFFLINE:
     TYPE: "OfflineRL"
-    model: "v1_5"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
+    model: "v1_6"  # v1 | v1_3 | v1_4 | v1_5 | v1_6 | v2 | v4 | v5
     buffer: False
     SAVE_LOADER: False
 
@@ -123,8 +123,9 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/av_wan_offline"
-    ONLINE_CKPT:  "PR/heard/ckpt/20260516_121249/model_epoch_300.pth"
+      # - "media/pt/way_point_offline"
+      - 'media/pt/mass_offline_data_reward_rescale_sequence'
+    ONLINE_CKPT: "PR/heard/ckpt/20260516_222029/model_epoch_300.pth"
 
     RANDOM_SHARD_RELOAD: True
     RANDOM_SHARDS_PER_EPOCH: 55
@@ -136,12 +137,12 @@ TRAIN:
 
     replay_epoch: 1000
     log_interval: 1
-    online_test_epoch: 5 # 不对onlinetest
+    online_test_epoch: 500 # 不对onlinetest
     online_test_frame_mode: "twoframe"
     batch_size: 512
     num_epochs: 150
 
-    state_dim: 384
+    state_dim: 256
     action_dim: 4
     hidden_dim: 128
     # lr: 0.0002

@@ -43,12 +43,12 @@ def _resolve_onlinerl_setup(online_cfg):
 
 
 def _load_hybrid_model(ckpt_path):
-    # from network import HybirdNetwork
-    from network.av_wan_network import Network
+    from network import HybirdNetwork
+    # from network.av_wan_network import Network
 
     device = _get_device()
     logger.info("loading hybrid model ckpt: %s", ckpt_path)
-    model = Network().to(device)
+    model = HybirdNetwork().to(device)
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
     model.eval()
     logger.info("hybrid model loaded on device=%s", device)
@@ -1124,11 +1124,11 @@ def main():
     )
     if task_config.COLLECT.OPEN:
         _run_collect(config, task_config.COLLECT)
-    elif task_config.PT.OPEN:
+    if task_config.PT.OPEN:
         _run_pt(task_config.PT)
-    elif task_config.EVAL.OPEN:
+    if task_config.EVAL.OPEN:
         _run_eval(config, task_config.EVAL)
-    elif task_config.TRAIN.OPEN:
+    if task_config.TRAIN.OPEN:
         _run_train(config, task_config.TRAIN)
     else:
         raise ValueError("No task is enabled. Please set one OPEN field to True.")

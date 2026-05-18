@@ -109,14 +109,28 @@ class RandomReloadShardedPTDatasetFoundation(Dataset):
         if self._epoch_counter % self.reload_every_epochs == 0:
             self._reload_shards(initial=False)
 
+    # @staticmethod
+    # def _default_sample_builder(data, local_idx):
+    #     import pdb;pdb.set_trace()
+    #     rgb = data["rgb"][local_idx]
+    #     depth = data["depth"][local_idx]
+    #     audio = data["audios"][local_idx]
+    #     action = data["actions"][local_idx]
+    #     std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
+    #     return std_audio, rgb, depth, action
     @staticmethod
     def _default_sample_builder(data, local_idx):
         rgb = data["rgb"][local_idx]
         depth = data["depth"][local_idx]
         audio = data["audios"][local_idx]
         action = data["actions"][local_idx]
+        action_ids = data['action_ids'][local_idx]
+        angles = data['angles'][local_idx]
+        # sound_ids = data['sound_ids'][local_idx]
+        consistency_actions = data['consistency_actions'][local_idx]
         std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
-        return std_audio, rgb, depth, action
+
+        return std_audio, rgb, depth,  angles  ,action , action_ids , consistency_actions    
 
     def __len__(self):
         return self.total_size
