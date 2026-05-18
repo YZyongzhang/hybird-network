@@ -1051,11 +1051,10 @@ class LoadLmdb:
             return [float(r) for r in rewards[:num_steps]]
 
         reward_global_scale = float(getattr(config, "WAYPOINT_REWARD_SCALE", 1.0))
-        waypoint_step = max(1, int(getattr(config, "WAYPOINT_STEP", 5)))
+        waypoint_step = max(1, int(getattr(config, "WAYPOINT_STEP", 3)))
         waypoint_reached_threshold = float(getattr(config, "WAYPOINT_REACHED_THRESHOLD", 0.1))
+        reward_step_bonus = float(getattr(config, "WAYPOINT_STEP_BONUS", 1.0))
         reward_reach_bonus = float(getattr(config, "WAYPOINT_REACH_BONUS", 3.0))
-        reward_progress_scale = float(getattr(config, "WAYPOINT_PROGRESS_SCALE", 2.0))
-        reward_far_penalty_scale = float(getattr(config, "WAYPOINT_FAR_PENALTY_SCALE", 1.0))
         reward_segment_scale = float(getattr(config, "WAYPOINT_SEGMENT_SCALE", 0.25))
         reward_done_bonus = float(getattr(config, "WAYPOINT_DONE_BONUS", 5.0))
         reward_min_clip = float(getattr(config, "WAYPOINT_REWARD_MIN_CLIP", -5.0))
@@ -1064,25 +1063,25 @@ class LoadLmdb:
         shaped_rewards = []
         waypoint_index = min(waypoint_step, num_steps)
         segment_id = 0
+        segment_start_index = 0
 
         for i in range(num_steps):
             current_point = np.asarray(path_points[i], dtype=np.float32)
             next_point = np.asarray(path_points[i + 1], dtype=np.float32)
             waypoint_point = np.asarray(path_points[waypoint_index], dtype=np.float32)
 
-            current_distance = float(np.linalg.norm(waypoint_point - current_point))
-            next_distance = float(np.linalg.norm(waypoint_point - next_point))
-            progress = current_distance - next_distance
+            segment_total_steps = max(1, waypoint_index - segment_start_index)
+            step_progress = min(i + 1 - segment_start_index, segment_total_steps)
+            progress_ratio = step_progress / segment_total_steps
 
             shaped_reward = float(rewards[i]) * reward_global_scale
-            shaped_reward += progress * reward_progress_scale
-            if progress < 0:
-                shaped_reward += progress * reward_far_penalty_scale
+            shaped_reward += progress_ratio * reward_step_bonus
 
-            reached_waypoint = next_distance <= waypoint_reached_threshold
+            reached_waypoint = float(np.linalg.norm(waypoint_point - next_point)) <= waypoint_reached_threshold
             if reached_waypoint:
                 shaped_reward += reward_reach_bonus + segment_id * reward_segment_scale
                 segment_id += 1
+                segment_start_index = i + 1
                 if waypoint_index < num_steps:
                     waypoint_index = min(waypoint_index + waypoint_step, num_steps)
 
@@ -1612,6 +1611,11 @@ class LoadLmdb:
         return torch.tensor([radius, theta], dtype=torch.float32)
     
     @classmethod
+    def load_offline_way_point_reward(cls, path, model, config, seq_len=5):
+        return cls.load_way_point_offline_lstm(path=path, model=model, config=config, seq_len=seq_len)
+
+
+    @classmethod
     def load_pt_hybrid(cls , path,model,config):
         files = cls.get_files(path = path)
         random.shuffle(files)
@@ -1640,11 +1644,11 @@ class LoadLmdb:
                 "actions": torch.stack(buffer_actions),
                 "action_ids": torch.stack(buffer_action_ids),
                 "angles": torch.stack(buffer_angles),
-                "sound_ids": torch.stack(buffer_sound_ids),
-                "pose": torch.stack(buffer_pose),
-                "ego_map": torch.stack(buffer_ego_map),
-                "collision": torch.stack(buffer_collision),
-                "consistency_actions": torch.stack(buffer_consistency),
+                # "sound_ids": torch.stack(buffer_sound_ids),
+                # "pose": torch.stack(buffer_pose),
+                # "ego_map": torch.stack(buffer_ego_map),
+                # "collision": torch.stack(buffer_collision),
+                # "consistency_actions": torch.stack(buffer_consistency),
             }, f"{config.TO_PATH}/foundation_model_shard_{shard_id}.pt")
             print(f"保存 shard {shard_id}, size={len(buffer_rgb)}")
             buffer_rgb.clear()

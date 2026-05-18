@@ -32,13 +32,13 @@ class Train:
             consistency_weight = 0.2
             polar_weight = 0.5
             for batch in self.train_loader:
-                batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action, batch_action_id, batch_consistency = batch
+                batch_audio , batch_rgb ,batch_depth, batch_angle , batch_action, batch_action_id = batch
 
                 batch_audio  , batch_rgb ,batch_depth = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device)
                 batch_action = batch_action.to(self.device).float()
                 batch_action_id = batch_action_id.to(self.device).long()
                 batch_angle = batch_angle.float().to(self.device)
-                batch_consistency = batch_consistency.to(self.device).float()
+                # batch_consistency = batch_consistency.to(self.device).float()
 
                 polar_predict, angle_logits, action_logits = self.train_model(batch_audio , batch_rgb , batch_depth)
                 loss_polar = F.mse_loss(polar_predict, batch_action)
@@ -96,12 +96,11 @@ class Train:
         with torch.no_grad():
 
             for batch in self.val_loader:
-                batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action, batch_action_id, batch_consistency = batch
+                batch_audio , batch_rgb ,batch_depth , batch_angle , batch_action, batch_action_id= batch
                 batch_audio  , batch_rgb , batch_depth = batch_audio.to(self.device) , batch_rgb.to(self.device) ,batch_depth.to(self.device)
                 batch_action = batch_action.to(self.device).float()
                 batch_action_id = batch_action_id.to(self.device).long()
                 batch_angle = batch_angle.float().to(self.device)
-                batch_consistency = batch_consistency.to(self.device).float()
 
                 polar_predict, angle_logits, action_logits = self.train_model(batch_audio , batch_rgb , batch_depth)
                 polar_loss = F.mse_loss(polar_predict, batch_action)

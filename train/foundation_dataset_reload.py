@@ -127,10 +127,10 @@ class RandomReloadShardedPTDatasetFoundation(Dataset):
         action_ids = data['action_ids'][local_idx]
         angles = data['angles'][local_idx]
         # sound_ids = data['sound_ids'][local_idx]
-        consistency_actions = data['consistency_actions'][local_idx]
+        # consistency_actions = data['consistency_actions'][local_idx]
         std_audio = (audio - audio.mean()) / (audio.std() + 1e-6)
 
-        return std_audio, rgb, depth,  angles  ,action , action_ids , consistency_actions    
+        return std_audio, rgb, depth,  angles  ,action , action_ids 
 
     def __len__(self):
         return self.total_size
