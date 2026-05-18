@@ -65,15 +65,15 @@ COLLECT:
   COLLECT_CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
 
 PT:
-  OPEN: False
+  OPEN: True
   TYPE: "offlinesequence"
   RAW_DATA_PATH: 
-    # - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
-    # - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
-    # - "dataset-data3/dataset/pickle/offline(muti_collided)"
+    - "dataset-data3/dataset/pickle/offline(1.5_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(2.0_muti)/level3"
+    - "dataset-data3/dataset/pickle/offline(muti_collided)"
     - "dataset-data3/dataset/pickle/hybird(heard_train_multiple)"
-    # - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
-  TO_PATH: "media/pt/way_point_offline_fix_bug"
+    - "/hdd-data1/getuanhui/media/offline(with_sac_ckpt_heard_spl_17)"
+  TO_PATH: "media/pt/way_point_offline"
   # CKPT: "media/HYBRID/20260307_235109/model_epoch_301.pth"
   CKPT: "PR/heard/ckpt/20260516_222029/model_epoch_300.pth"
   SHARD_SIZE: 10000
@@ -123,7 +123,7 @@ TRAIN:
     EXPERIMENT_CKPT_DIR: "media/TRAIN"
 
     train_shard_pattern:
-      - "media/pt/way_point_offline_fix_bug"
+      - "media/pt/way_point_offline"
       # - 'media/pt/mass_offline_data_reward_rescale_sequence'
     ONLINE_CKPT: "PR/heard/ckpt/20260516_222029/model_epoch_300.pth"
 
@@ -137,7 +137,7 @@ TRAIN:
 
     replay_epoch: 1000
     log_interval: 1
-    online_test_epoch: 500 # 不对onlinetest
+    online_test_epoch: 5 # 不对onlinetest
     online_test_frame_mode: "twoframe"
     batch_size: 512
     num_epochs: 150
