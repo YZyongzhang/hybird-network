@@ -1619,6 +1619,7 @@ class LoadLmdb:
 
         shard_size = int(getattr(config, "SHARD_SIZE", 10000))
         consistency_step = int(getattr(config, "CONSISTENCY_STEP", 1))
+        polar_action_step = max(1, int(getattr(config, "POLAR_ACTION_STEP", 3)))
         shard_id = 0
 
         buffer_rgb, buffer_depth, buffer_audios = [], [], []
@@ -1670,7 +1671,7 @@ class LoadLmdb:
                 continue
 
             sound_values = cls._extract_sound_values_per_step(data, num_steps)
-            sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
+            # sound_ids = cls._encode_sound_values(sound_values, sound_label_to_id)
             path_points = cls._normalize_path_points(data.get('path_point', []))
             has_path_points = len(path_points) >= num_steps + 1
 
@@ -1693,20 +1694,21 @@ class LoadLmdb:
 
                 if has_path_points:
                     current_point = np.asarray(path_points[i], dtype=np.float32)
-                    next_point = np.asarray(path_points[i + 1], dtype=np.float32)
-                    consistency_index = min(i + consistency_step, num_steps)
-                    consistency_point = np.asarray(path_points[consistency_index], dtype=np.float32)
-                    polar_action = cls._point_to_polar(next_point, current_point)
-                    consistency_action = cls._point_to_polar(consistency_point, current_point)
+                    polar_action_index = min(i + polar_action_step, num_steps)
+                    # consistency_index = min(i + consistency_step, num_steps)
+                    polar_action_point = np.asarray(path_points[polar_action_index], dtype=np.float32)
+                    # consistency_point = np.asarray(path_points[consistency_index], dtype=np.float32)
+                    polar_action = cls._point_to_polar(polar_action_point, current_point)
+                    # consistency_action = cls._point_to_polar(consistency_point, current_point)
                 else:
                     polar_action = torch.zeros(2, dtype=torch.float32)
-                    consistency_action = torch.zeros(2, dtype=torch.float32)
+                    # consistency_action = torch.zeros(2, dtype=torch.float32)
 
                 angle = np.degrees(v['angle'][1])
                 discrete_action = cls._safe_to_int(action_id[i], default=0)
-                pose = torch.as_tensor(v['pose'], dtype=torch.float32)
-                ego_map = torch.from_numpy(v['ego_map']).float()
-                collision = torch.tensor(cls._safe_to_bool(v.get('collision', [False])[0], default=False), dtype=torch.bool)
+                # pose = torch.as_tensor(v['pose'], dtype=torch.float32)
+                # ego_map = torch.from_numpy(v['ego_map']).float()
+                # collision = torch.tensor(cls._safe_to_bool(v.get('collision', [False])[0], default=False), dtype=torch.bool)
 
                 buffer_rgb.append(rgb)
                 buffer_depth.append(depth)
@@ -1714,11 +1716,11 @@ class LoadLmdb:
                 buffer_actions.append(polar_action)
                 buffer_action_ids.append(torch.tensor(discrete_action, dtype=torch.long))
                 buffer_angles.append(torch.tensor(angle, dtype=torch.float32))
-                buffer_sound_ids.append(torch.tensor(sound_ids[i], dtype=torch.long))
-                buffer_pose.append(pose)
-                buffer_ego_map.append(ego_map)
-                buffer_collision.append(collision)
-                buffer_consistency.append(consistency_action)
+                # buffer_sound_ids.append(torch.tensor(sound_ids[i], dtype=torch.long))
+                # buffer_pose.append(pose)
+                # buffer_ego_map.append(ego_map)
+                # buffer_collision.append(collision)
+                # buffer_consistency.append(consistency_action)
 
                 if len(buffer_rgb) >= shard_size:
                     flush_shard()
